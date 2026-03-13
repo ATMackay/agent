@@ -5,10 +5,10 @@
 BUILD_FOLDER = build
 COVERAGE_BUILD_FOLDER    ?= $(BUILD_FOLDER)/coverage
 UNIT_COVERAGE_OUT        ?= $(COVERAGE_BUILD_FOLDER)/ut_cov.out
-BIN                      ?= $(BUILD_FOLDER)/checkout
+BIN                      ?= $(BUILD_FOLDER)/agent
 
 # Packages
-PKG                      ?= github.com/ATMackay/checkout
+PKG                      ?= github.com/ATMackay/agent
 CONSTANTS_PKG            ?= $(PKG)/constants
 
 
@@ -31,7 +31,7 @@ install: build
 	mv $(BIN) $(GOBIN)
 
 run: build
-	@./$(BUILD_FOLDER)/agents run --documentation --demo
+	@./$(BUILD_FOLDER)/agents run documentor --repo https://github.com/ATMackay/agent.git
 
 build/coverage:
 	@mkdir -p $(COVERAGE_BUILD_FOLDER)

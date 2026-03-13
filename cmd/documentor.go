@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	agentpkg "google.golang.org/adk/agent"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/ATMackay/agent/agents/documentor"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func NewDocumentorCmd() *cobra.Command {
@@ -20,14 +22,16 @@ func NewDocumentorCmd() *cobra.Command {
 	var output string
 	var maxFiles int
 	var model string
+	var apiKey string
 
 	cmd := &cobra.Command{
 		Use:   "documentor",
 		Short: "Run the code documentation agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			apiKey := os.Getenv("GOOGLE_API_KEY")
+			// Prefer explicit flag, then env vars via Viper.
+			apiKey = viper.GetString("google-api-key")
 			if apiKey == "" {
-				return fmt.Errorf("GOOGLE_API_KEY is required")
+				return fmt.Errorf("google api key is required; set --google-api-key or export GOOGLE_API_KEY")
 			}
 			if repoURL == "" {
 				return fmt.Errorf("--repo is required")
@@ -40,9 +44,21 @@ func NewDocumentorCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("create work dir: %w", err)
 			}
-			defer os.RemoveAll(workDir)
+			defer func() {
+				if err := os.RemoveAll(workDir); err != nil {
+					fmt.Println(err)
+				}
+			}()
 
 			ctx := cmd.Context()
+
+			slog.Info(
+				"creating documentor agent",
+				"dir", workDir,
+				"model", model,
+				"output", output,
+				"repoURL", repoURL,
+			)
 
 			doc, err := documentor.NewDocumentorAgent(ctx, documentor.Config{
 				ModelName: model,
@@ -53,10 +69,16 @@ func NewDocumentorCmd() *cobra.Command {
 				return fmt.Errorf("create agent: %w", err)
 			}
 
+			slog.Info(
+				"crrated agent",
+				"agent_name", doc.Agent().Name(),
+				"agent_description", doc.Agent().Description(),
+			)
+
 			sessService := session.InMemoryService()
 			r, err := runner.New(runner.Config{
 				AppName:        "documentor",
-				Agent:          doc,
+				Agent:          doc.Agent(),
 				SessionService: sessService,
 			})
 			if err != nil {
@@ -96,14 +118,15 @@ func NewDocumentorCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("agent error: %w", err)
 				}
-				_ = event
+				// handle event (log)
+				slog.Info("event", "response_content", event.Content, "branch", event.Branch)
 			}
 
 			if _, err := os.Stat(output); err != nil {
 				return fmt.Errorf("agent finished but output file was not created: %w", err)
 			}
 
-			fmt.Printf("Documentation written to %s\n", output)
+			slog.Info("Documentation written to", "output_file", output)
 			return nil
 		},
 	}
@@ -114,6 +137,17 @@ func NewDocumentorCmd() *cobra.Command {
 	cmd.Flags().StringVar(&output, "output", "", "Output file path for the generated markdown")
 	cmd.Flags().IntVar(&maxFiles, "max-files", 20, "Maximum number of files to read")
 	cmd.Flags().StringVar(&model, "model", "gemini-2.5-pro", "Gemini model to use")
+
+	// Bind flags to environment variables
+	must(viper.BindPFlag("repo", cmd.Flags().Lookup("repo")))
+	must(viper.BindPFlag("ref", cmd.Flags().Lookup("ref")))
+	must(viper.BindPFlag("path", cmd.Flags().Lookup("path")))
+	must(viper.BindPFlag("output", cmd.Flags().Lookup("output")))
+	must(viper.BindPFlag("max-files", cmd.Flags().Lookup("max-files")))
+	must(viper.BindPFlag("model", cmd.Flags().Lookup("model")))
+
+	// GOOGLE_API_KEY is preferred, GEMINI_API_KEY is accepted as fallback.
+	must(viper.BindEnv("google-api-key", "GOOGLE_API_KEY", "GEMINI_API_KEY"))
 
 	return cmd
 }

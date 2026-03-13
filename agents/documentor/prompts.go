@@ -1,67 +1,31 @@
 package documentor
 
-import (
-	"fmt"
-	"strings"
-)
+func buildInstruction() string {
+	return `
+You are a code documentation agent.
 
-func buildAnalysisPrompt(state State) string {
-	var b strings.Builder
+Repository: {repo_url}
+Ref: {repo_ref?}
+Sub-path filter: {sub_path?}
+Output path: {output_path}
+Max files to read: {max_files?}
 
-	fmt.Fprintf(&b, "Analyze this repository and produce architecture notes.\n\n")
-	fmt.Fprintf(&b, "Repository: %s\n", state.Repo.URL)
-	fmt.Fprintf(&b, "Ref: %s\n\n", state.Repo.Ref)
+Workflow:
+1. Call fetch_repo_tree first using the repository_url, ref, and sub_path from state.
+2. Inspect the manifest and identify the most relevant files for architecture and code-level documentation.
+3. Prefer entry points, cmd/, internal/, pkg/, config, and core domain files.
+4. Skip tests, generated files, vendor, binaries, and irrelevant assets unless they are central.
+5. Do not read more than max_files files.
+6. Call read_repo_file for each selected file.
+7. Write detailed maintainers' documentation in markdown.
+8. Call write_output_file with the completed markdown and output_path.
 
-	fmt.Fprintf(&b, "Manifest:\n")
-	for _, f := range state.Manifest {
-		fmt.Fprintf(&b, "- %s (lang=%s, pkg=%s, entry=%t)\n", f.Path, f.Language, f.PackageName, f.IsEntry)
-	}
-
-	fmt.Fprintf(&b, "\nSelected file contents:\n")
-	for _, f := range state.Selected {
-		fmt.Fprintf(&b, "\n===== FILE: %s =====\n%s\n", f.Path, f.Content)
-	}
-
-	fmt.Fprintf(&b, `
-Write architecture notes covering:
-- purpose of the repo/subsystem
-- main packages/modules
-- entry points
-- key types/functions/interfaces
-- config flow
-- error handling patterns
-- extension points
-- unclear areas / TODOs
-
-Be precise. Do not invent behavior.
-`)
-	return b.String()
-}
-
-func buildWriterPrompt(state State) string {
-	var b strings.Builder
-
-	fmt.Fprintf(&b, "Write high-quality maintainer documentation as markdown.\n\n")
-	fmt.Fprintf(&b, "Repository: %s\n", state.Repo.URL)
-	fmt.Fprintf(&b, "Ref: %s\n\n", state.Repo.Ref)
-
-	fmt.Fprintf(&b, "Architecture notes:\n%s\n\n", state.AnalysisMD)
-
-	fmt.Fprintf(&b, `
-Output requirements:
-- Title
-- Executive summary
-- Architecture overview
-- Package/module breakdown
-- Key types and functions
-- Execution/control flow
-- Configuration and dependencies
-- Extension points
-- Operational notes / caveats
-- File index of the most important files
-
-Include file paths and symbol names where possible.
-Do not include unsupported claims.
-`)
-	return b.String()
+Requirements:
+- Explain architecture and package responsibilities.
+- Explain key types, functions, interfaces, and control flow.
+- Explain configuration, dependencies, and extension points.
+- Mention important file paths and symbol names.
+- Do not invent behavior beyond the code retrieved.
+- If repository coverage is partial, say so explicitly.
+`
 }

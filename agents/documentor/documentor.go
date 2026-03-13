@@ -2,7 +2,6 @@ package documentor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"google.golang.org/adk/agent"
@@ -13,13 +12,12 @@ import (
 	"google.golang.org/genai"
 )
 
-type Config struct {
-	ModelName string
-	APIKey    string
-	WorkDir   string
+type Documentor struct {
+	inner agent.Agent
 }
 
-func NewDocumentorAgent(ctx context.Context, cfg Config) (agent.Agent, error) {
+// NewDocumentorAgent returns a Documentor.
+func NewDocumentorAgent(ctx context.Context, cfg Config) (*Documentor, error) {
 	if cfg.ModelName == "" {
 		cfg.ModelName = "gemini-2.5-pro"
 	}
@@ -67,166 +65,27 @@ func NewDocumentorAgent(ctx context.Context, cfg Config) (agent.Agent, error) {
 		return nil, fmt.Errorf("create write_output_file tool: %w", err)
 	}
 
-	return llmagent.New(llmagent.Config{
+	// Instantiate LLM agent
+	da, err := llmagent.New(llmagent.Config{
 		Name:        "documentor",
 		Model:       model,
 		Description: "Retrieves code from a GitHub repository and writes high-quality markdown documentation.",
 		Instruction: buildInstruction(),
 		Tools: []tool.Tool{
-			fetchRepoTreeTool,
+			fetchRepoTreeTool, // Fetch Git Repository files
 			readRepoFileTool,
 			writeOutputTool,
 		},
 		OutputKey: StateDocumentation,
 	})
-}
-
-func buildInstruction() string {
-	return `
-You are a code documentation agent.
-
-Repository: {repo_url}
-Ref: {repo_ref?}
-Sub-path filter: {sub_path?}
-Output path: {output_path}
-Max files to read: {max_files?}
-
-Workflow:
-1. Call fetch_repo_tree first using the repository_url, ref, and sub_path from state.
-2. Inspect the manifest and identify the most relevant files for architecture and code-level documentation.
-3. Prefer entry points, cmd/, internal/, pkg/, config, and core domain files.
-4. Skip tests, generated files, vendor, binaries, and irrelevant assets unless they are central.
-5. Do not read more than max_files files.
-6. Call read_repo_file for each selected file.
-7. Write detailed maintainers' documentation in markdown.
-8. Call write_output_file with the completed markdown and output_path.
-
-Requirements:
-- Explain architecture and package responsibilities.
-- Explain key types, functions, interfaces, and control flow.
-- Explain configuration, dependencies, and extension points.
-- Mention important file paths and symbol names.
-- Do not invent behavior beyond the code retrieved.
-- If repository coverage is partial, say so explicitly.
-`
-}
-
-type FetchRepoTreeArgs struct {
-	RepositoryURL string `json:"repository_url"`
-	Ref           string `json:"ref,omitempty"`
-	SubPath       string `json:"sub_path,omitempty"`
-}
-
-type FileEntry struct {
-	Path string `json:"path"`
-	Kind string `json:"kind"`
-	Size int64  `json:"size,omitempty"`
-}
-
-type FetchRepoTreeResult struct {
-	FileCount int         `json:"file_count"`
-	Manifest  []FileEntry `json:"manifest"`
-}
-
-func newFetchRepoTreeTool(cfg Config) func(tool.Context, FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
-	return func(ctx tool.Context, args FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
-		localPath, manifest, err := fetchRepoManifest(args.RepositoryURL, args.Ref, args.SubPath, cfg.WorkDir)
-		if err != nil {
-			return FetchRepoTreeResult{}, err
-		}
-
-		raw, err := json.Marshal(manifest)
-		if err != nil {
-			return FetchRepoTreeResult{}, err
-		}
-
-		ctx.Actions().StateDelta[StateRepoURL] = args.RepositoryURL
-		ctx.Actions().StateDelta[StateRepoRef] = args.Ref
-		ctx.Actions().StateDelta[StateSubPath] = args.SubPath
-		ctx.Actions().StateDelta[StateRepoManifest] = string(raw)
-		ctx.Actions().StateDelta[StateRepoLocalPath] = localPath
-
-		return FetchRepoTreeResult{
-			FileCount: len(manifest),
-			Manifest:  manifest,
-		}, nil
+	if err != nil {
+		return nil, err
 	}
+
+	return &Documentor{inner: da}, nil
 }
 
-type ReadRepoFileArgs struct {
-	Path string `json:"path"`
-}
-
-type ReadRepoFileResult struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-}
-
-func newReadRepoFileTool() func(tool.Context, ReadRepoFileArgs) (ReadRepoFileResult, error) {
-	return func(ctx tool.Context, args ReadRepoFileArgs) (ReadRepoFileResult, error) {
-		v, err := ctx.State().Get(StateRepoLocalPath)
-		if err != nil {
-			return ReadRepoFileResult{}, fmt.Errorf("read repo local path from state: %w", err)
-		}
-
-		localPath, ok := v.(string)
-		if !ok || localPath == "" {
-			return ReadRepoFileResult{}, fmt.Errorf("repository cache not initialized; call fetch_repo_tree first")
-		}
-
-		content, err := readRepoFileFromCachedCheckout(localPath, args.Path)
-		if err != nil {
-			return ReadRepoFileResult{}, err
-		}
-
-		loaded := map[string]string{}
-		existing, err := ctx.State().Get(StateLoadedFiles)
-		if err == nil && existing != nil {
-			if s, ok := existing.(string); ok && s != "" {
-				_ = json.Unmarshal([]byte(s), &loaded)
-			}
-		}
-
-		loaded[args.Path] = content
-		raw, _ := json.Marshal(loaded)
-		ctx.Actions().StateDelta[StateLoadedFiles] = string(raw)
-
-		return ReadRepoFileResult{
-			Path:    args.Path,
-			Content: content,
-		}, nil
-	}
-}
-
-type WriteOutputFileArgs struct {
-	Markdown   string `json:"markdown"`
-	OutputPath string `json:"output_path,omitempty"`
-}
-
-type WriteOutputFileResult struct {
-	Path string `json:"path"`
-}
-
-func newWriteOutputFileTool() func(tool.Context, WriteOutputFileArgs) (WriteOutputFileResult, error) {
-	return func(ctx tool.Context, args WriteOutputFileArgs) (WriteOutputFileResult, error) {
-		out := args.OutputPath
-		if out == "" {
-			v, err := ctx.State().Get(StateOutputPath)
-			if err == nil {
-				if s, ok := v.(string); ok {
-					out = s
-				}
-			}
-		}
-		if out == "" {
-			return WriteOutputFileResult{}, fmt.Errorf("output path is required")
-		}
-
-		if err := writeTextFile(out, args.Markdown); err != nil {
-			return WriteOutputFileResult{}, err
-		}
-
-		ctx.Actions().StateDelta[StateDocumentation] = args.Markdown
-		return WriteOutputFileResult{Path: out}, nil
-	}
+// Agent returns the inner agent interface (higher abstraction may not be necessary but we will see)
+func (d *Documentor) Agent() agent.Agent {
+	return d.inner
 }

@@ -48,11 +48,6 @@ func NewRunCmd() *cobra.Command {
 	cmd.Flags().String("log-level", "info", "Log level (debug, info, warn, error, fatal, panic)")
 	cmd.Flags().String("log-format", "text", "Log format (text, json)")
 
-	must := func(err error) {
-		if err != nil {
-			panic(err)
-		}
-	}
 	// Bind flags to environment variables
 	must(viper.BindPFlag("log-level", cmd.Flags().Lookup("log-level")))
 	must(viper.BindPFlag("log-format", cmd.Flags().Lookup("log-format")))
@@ -63,4 +58,10 @@ func NewRunCmd() *cobra.Command {
 	viper.AutomaticEnv() // Automatically read environment variables
 	return cmd
 
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

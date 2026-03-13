@@ -14,35 +14,3 @@ const (
 
 	StateDocumentation = "documentation_markdown"
 )
-
-type FileInfo struct {
-	Path        string
-	Size        int64
-	Language    string
-	PackageName string
-	IsEntry     bool
-	IsTest      bool
-	IsGenerated bool
-}
-
-type SourceFile struct {
-	Path    string
-	Content string
-}
-
-type RepoMetadata struct {
-	Owner string
-	Name  string
-	Ref   string
-	URL   string
-}
-
-type State struct {
-	Repo          RepoMetadata
-	LocalPath     string
-	OutputPath    string
-	Manifest      []FileInfo
-	Selected      []SourceFile
-	AnalysisMD    string
-	Documentation string
-}
