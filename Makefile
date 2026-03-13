@@ -25,7 +25,7 @@ build:
 	@mkdir -p build
 	@echo ">> building $(BIN) (version=$(VERSION_TAG) commit=$(GIT_COMMIT) dirty=$(DIRTY))"
 	GO111MODULE=on go build -ldflags "$(LDFLAGS)" -o $(BIN)
-	@echo  "Checkout server successfully built. To run the application execute './$(BIN) run'"
+	@echo  "Agent server successfully built. To run the application execute './$(BIN) run'"
 
 install: build
 	mv $(BIN) $(GOBIN)

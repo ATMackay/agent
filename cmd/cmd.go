@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"code-agent/constants"
 	"fmt"
 
+	"github.com/ATMackay/agent/constants"
 	"github.com/spf13/cobra"
 )
 

@@ -1,0 +1,46 @@
+# Alex Mackay 2026
+# Golang CI with GitHub Actions
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.26.0'
+
+    - name: build
+      run: go build -v ./...
+
+    - name: unit-test
+      run: go test -v ./...
+
+  golangci:
+    runs-on: ubuntu-latest
+    name: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          install-mode: goinstall
+          version: latest
+          args: --timeout=2m
