@@ -4,15 +4,21 @@ import "errors"
 
 // Config is the base config struct for documentation agent
 type Config struct {
-	ModelName string
-	APIKey    string
-	WorkDir   string
+	WorkDir string
+}
+
+func (c *Config) SetDefaults() *Config {
+	if c.WorkDir == "" {
+		c.WorkDir = "."
+	}
+	return c
 }
 
 func (c Config) Validate() error {
-	// model name & work dir use defaults
-	if c.APIKey == "" {
-		return errors.New("missing API key")
+	// ensure workdir is either explicitly set or defaults are set
+	// Empty workdir not allowed
+	if c.WorkDir == "" {
+		return errors.New("empty work dir supplied")
 	}
 	return nil
 }

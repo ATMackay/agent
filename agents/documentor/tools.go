@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
 )
 
 type FetchRepoTreeArgs struct {
@@ -24,7 +25,7 @@ type FetchRepoTreeResult struct {
 	Manifest  []FileEntry `json:"manifest"`
 }
 
-func newFetchRepoTreeTool(cfg Config) func(tool.Context, FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
+func newFetchRepoTreeTool(cfg *Config) func(tool.Context, FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
 	return func(ctx tool.Context, args FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
 		localPath, manifest, err := fetchRepoManifest(args.RepositoryURL, args.Ref, args.SubPath, cfg.WorkDir)
 		if err != nil {
@@ -47,6 +48,21 @@ func newFetchRepoTreeTool(cfg Config) func(tool.Context, FetchRepoTreeArgs) (Fet
 			Manifest:  manifest,
 		}, nil
 	}
+}
+
+// NewFetchRepoTool returns a fetch_repo_tree function tool.
+func NewFetchRepoTreeTool(cfg *Config) (tool.Tool, error) {
+	fetchRepoTreeTool, err := functiontool.New(
+		functiontool.Config{
+			Name:        "fetch_repo_tree",
+			Description: "Download the GitHub repository to a local cache, build a source-file manifest, and store both in state.",
+		},
+		newFetchRepoTreeTool(cfg),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create fetch_repo_tree tool: %w", err)
+	}
+	return fetchRepoTreeTool, nil
 }
 
 type ReadRepoFileArgs struct {
@@ -94,6 +110,21 @@ func newReadRepoFileTool() func(tool.Context, ReadRepoFileArgs) (ReadRepoFileRes
 	}
 }
 
+// NewFetchRepoTool returns a fetch_repo_tree function tool.
+func NewReadRepoFileTool(_ *Config) (tool.Tool, error) {
+	readRepoFileTool, err := functiontool.New(
+		functiontool.Config{
+			Name:        "read_repo_file",
+			Description: "Read a repository file from the cached checkout and store it in state.",
+		},
+		newReadRepoFileTool(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create read_repo_file tool: %w", err)
+	}
+	return readRepoFileTool, nil
+}
+
 type WriteOutputFileArgs struct {
 	Markdown   string `json:"markdown"`
 	OutputPath string `json:"output_path,omitempty"`
@@ -125,4 +156,19 @@ func newWriteOutputFileTool() func(tool.Context, WriteOutputFileArgs) (WriteOutp
 		ctx.Actions().StateDelta[StateDocumentation] = args.Markdown
 		return WriteOutputFileResult{Path: out}, nil
 	}
+}
+
+// NewWriteOutputTool returns a write_output_file function tool.
+func NewWriteOutputTool(_ *Config) (tool.Tool, error) {
+	writeOutputTool, err := functiontool.New(
+		functiontool.Config{
+			Name:        "write_output_file",
+			Description: "Write markdown documentation to the requested output file.",
+		},
+		newWriteOutputFileTool(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create write_output_file tool: %w", err)
+	}
+	return writeOutputTool, nil
 }

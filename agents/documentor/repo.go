@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -95,7 +96,7 @@ func downloadAndExtractGitHubRepo(owner, repo, ref, workDir string) (string, err
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Println(err)
+			slog.Error("error closing body", "err", err)
 		}
 	}()
 
@@ -121,7 +122,7 @@ func untarGz(r io.Reader, dest string) error {
 	}
 	defer func() {
 		if err := gzr.Close(); err != nil {
-			fmt.Println(err)
+			slog.Error("error closing body", "err", err)
 		}
 	}()
 

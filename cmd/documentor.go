@@ -6,6 +6,7 @@ import (
 	"os"
 
 	agentpkg "google.golang.org/adk/agent"
+	"google.golang.org/adk/model/gemini"
 	"google.golang.org/adk/runner"
 	"google.golang.org/adk/session"
 	"google.golang.org/genai"
@@ -21,7 +22,7 @@ func NewDocumentorCmd() *cobra.Command {
 	var pathPrefix string
 	var output string
 	var maxFiles int
-	var model string
+	var modelName string
 	var apiKey string
 
 	cmd := &cobra.Command{
@@ -46,39 +47,50 @@ func NewDocumentorCmd() *cobra.Command {
 			}
 			defer func() {
 				if err := os.RemoveAll(workDir); err != nil {
-					fmt.Println(err)
+					slog.Error("error removing body", "err", err)
 				}
 			}()
+
+			cfg := &documentor.Config{WorkDir: workDir}
+			cfg = cfg.SetDefaults()
+			if err := cfg.Validate(); err != nil {
+				return fmt.Errorf("invalid config: %w", err)
+			}
 
 			ctx := cmd.Context()
 
 			slog.Info(
 				"creating documentor agent",
 				"dir", workDir,
-				"model", model,
+				"model", modelName,
 				"output", output,
 				"repoURL", repoURL,
 			)
 
-			doc, err := documentor.NewDocumentorAgent(ctx, documentor.Config{
-				ModelName: model,
-				APIKey:    apiKey,
-				WorkDir:   workDir,
+			// Start with Gemini models
+			// TODO create abstraction and package to support arbitrary model types.
+			mod, err := gemini.NewModel(ctx, modelName, &genai.ClientConfig{
+				APIKey: apiKey,
 			})
+			if err != nil {
+				return fmt.Errorf("create model: %w", err)
+			}
+
+			docAgent, err := documentor.NewDocumentorAgent(ctx, cfg, mod)
 			if err != nil {
 				return fmt.Errorf("create agent: %w", err)
 			}
 
 			slog.Info(
 				"crrated agent",
-				"agent_name", doc.Agent().Name(),
-				"agent_description", doc.Agent().Description(),
+				"agent_name", docAgent.Agent().Name(),
+				"agent_description", docAgent.Agent().Description(),
 			)
 
 			sessService := session.InMemoryService()
 			r, err := runner.New(runner.Config{
 				AppName:        "documentor",
-				Agent:          doc.Agent(),
+				Agent:          docAgent.Agent(),
 				SessionService: sessService,
 			})
 			if err != nil {
@@ -136,7 +148,7 @@ func NewDocumentorCmd() *cobra.Command {
 	cmd.Flags().StringVar(&pathPrefix, "path", "", "Optional subdirectory to document")
 	cmd.Flags().StringVar(&output, "output", "", "Output file path for the generated markdown")
 	cmd.Flags().IntVar(&maxFiles, "max-files", 20, "Maximum number of files to read")
-	cmd.Flags().StringVar(&model, "model", "gemini-2.5-pro", "Gemini model to use")
+	cmd.Flags().StringVar(&modelName, "model", "gemini-2.5-pro", "Gemini model to use")
 
 	// Bind flags to environment variables
 	must(viper.BindPFlag("repo", cmd.Flags().Lookup("repo")))
