@@ -3,6 +3,8 @@ package documentor
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
@@ -156,6 +158,14 @@ func newWriteOutputFileTool() func(tool.Context, WriteOutputFileArgs) (WriteOutp
 		ctx.Actions().StateDelta[StateDocumentation] = args.Markdown
 		return WriteOutputFileResult{Path: out}, nil
 	}
+}
+
+// writeTextFile creates parent directories as needed and writes content to path.
+func writeTextFile(path, content string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
 }
 
 // NewWriteOutputTool returns a write_output_file function tool.

@@ -76,13 +76,13 @@ func NewDocumentorCmd() *cobra.Command {
 				return fmt.Errorf("create model: %w", err)
 			}
 
-			docAgent, err := documentor.NewDocumentorAgent(ctx, cfg, mod)
+			docAgent, err := documentor.NewDocumentor(ctx, cfg, mod)
 			if err != nil {
 				return fmt.Errorf("create agent: %w", err)
 			}
 
 			slog.Info(
-				"crrated agent",
+				"created agent",
 				"agent_name", docAgent.Agent().Name(),
 				"agent_description", docAgent.Agent().Description(),
 			)

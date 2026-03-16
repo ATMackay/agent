@@ -13,8 +13,8 @@ type Documentor struct {
 	inner agent.Agent
 }
 
-// NewDocumentorAgent returns a Documentor.
-func NewDocumentorAgent(ctx context.Context, cfg *Config, model model.LLM) (*Documentor, error) {
+// NewDocumentor returns a Documentor agent.
+func NewDocumentor(ctx context.Context, cfg *Config, model model.LLM) (*Documentor, error) {
 	// Configure documentor agent tools
 	fetchRepoTreeTool, err := NewFetchRepoTreeTool(cfg)
 	if err != nil {

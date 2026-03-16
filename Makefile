@@ -1,14 +1,14 @@
 # Alex Mackay 2026
 
 
-# Build folder
+# Build folder (CLI)
 BUILD_FOLDER = build
 COVERAGE_BUILD_FOLDER    ?= $(BUILD_FOLDER)/coverage
 UNIT_COVERAGE_OUT        ?= $(COVERAGE_BUILD_FOLDER)/ut_cov.out
-BIN                      ?= $(BUILD_FOLDER)/agent
+BIN                      ?= $(BUILD_FOLDER)/agent-cli
 
 # Packages
-PKG                      ?= github.com/ATMackay/agent
+PKG                      ?= github.com/ATMackay/agent-cli
 CONSTANTS_PKG            ?= $(PKG)/constants
 
 
@@ -31,10 +31,10 @@ install: build
 	mv $(BIN) $(GOBIN)
 
 run: build
-	@./$(BUILD_FOLDER)/agents run documentor --repo https://github.com/ATMackay/agent.git
+	@./$(BUILD_FOLDER)/agent-cli run documentor --repo https://github.com/ATMackay/agent.git
 
-build/coverage:
+test: 
 	@mkdir -p $(COVERAGE_BUILD_FOLDER)
-
-test: build/coverage
 	@go test -cover -coverprofile $(UNIT_COVERAGE_OUT) -v ./...
+
+.PHONY: build install run test
