@@ -139,6 +139,7 @@ func NewDocumentorCmd() *cobra.Command {
 				}
 				// handle event (log)
 				slog.Info("event", "id", event.ID, "author", event.Author)
+				slog.Debug("event_content", "role", event.Content.Role, "parts", event.Content.Parts)
 			}
 
 			if _, err := os.Stat(output); err != nil {
