@@ -1,14 +1,14 @@
 # Alex Mackay 2026
 
 
-# Build folder
+# Build folder (CLI)
 BUILD_FOLDER = build
 COVERAGE_BUILD_FOLDER    ?= $(BUILD_FOLDER)/coverage
 UNIT_COVERAGE_OUT        ?= $(COVERAGE_BUILD_FOLDER)/ut_cov.out
-BIN                      ?= $(BUILD_FOLDER)/checkout
+BIN                      ?= $(BUILD_FOLDER)/agent-cli
 
 # Packages
-PKG                      ?= github.com/ATMackay/checkout
+PKG                      ?= github.com/ATMackay/agent
 CONSTANTS_PKG            ?= $(PKG)/constants
 
 
@@ -21,20 +21,28 @@ ifndef DIRTY
 DIRTY := $(shell if [ -n "$$(git status --porcelain 2>/dev/null)" ]; then echo true; else echo false; fi)
 endif
 
+LDFLAGS := -s -w \
+  -X '$(CONSTANTS_PKG).Version=$(VERSION_TAG)' \
+  -X '$(CONSTANTS_PKG).CommitDate=$(COMMIT_DATE)' \
+  -X '$(CONSTANTS_PKG).GitCommit=$(GIT_COMMIT)' \
+  -X '$(CONSTANTS_PKG).BuildDate=$(BUILD_DATE)' \
+  -X '$(CONSTANTS_PKG).Dirty=$(DIRTY)'
+
+
 build:
 	@mkdir -p build
 	@echo ">> building $(BIN) (version=$(VERSION_TAG) commit=$(GIT_COMMIT) dirty=$(DIRTY))"
 	GO111MODULE=on go build -ldflags "$(LDFLAGS)" -o $(BIN)
-	@echo  "Checkout server successfully built. To run the application execute './$(BIN) run'"
+	@echo  "Agent server successfully built. To run the application execute './$(BIN) run'"
 
 install: build
 	mv $(BIN) $(GOBIN)
 
 run: build
-	@./$(BUILD_FOLDER)/agents run --documentation --demo
+	@./$(BUILD_FOLDER)/agent-cli run documentor --repo https://github.com/ATMackay/agent.git
 
-build/coverage:
+test: 
 	@mkdir -p $(COVERAGE_BUILD_FOLDER)
-
-test: build/coverage
 	@go test -cover -coverprofile $(UNIT_COVERAGE_OUT) -v ./...
+
+.PHONY: build install run test

@@ -14,20 +14,18 @@ func NewRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run",
 		Short: fmt.Sprintf("Start the %s", constants.ServiceName),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Read configuration from Viper
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			logLevel := viper.GetString("log-level")
 			logFormat := viper.GetString("log-format")
-			//
-			// Execute the main application lifecycle
-			//
-			// Initialize logger
+
 			if err := initLogging(logLevel, logFormat); err != nil {
 				return fmt.Errorf("failed to initialize logger: %w", err)
 			}
 
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
 			if isBuildDirty() {
-				// Warn if the build contains uncommitted changes
 				slog.Warn("running a DIRTY build (uncommitted changes present) — do not run in production")
 			}
 			slog.Info(fmt.Sprintf("starting %s", constants.ServiceName),
@@ -48,11 +46,6 @@ func NewRunCmd() *cobra.Command {
 	cmd.Flags().String("log-level", "info", "Log level (debug, info, warn, error, fatal, panic)")
 	cmd.Flags().String("log-format", "text", "Log format (text, json)")
 
-	must := func(err error) {
-		if err != nil {
-			panic(err)
-		}
-	}
 	// Bind flags to environment variables
 	must(viper.BindPFlag("log-level", cmd.Flags().Lookup("log-level")))
 	must(viper.BindPFlag("log-format", cmd.Flags().Lookup("log-format")))
@@ -63,4 +56,10 @@ func NewRunCmd() *cobra.Command {
 	viper.AutomaticEnv() // Automatically read environment variables
 	return cmd
 
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

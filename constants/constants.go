@@ -1,3 +1,3 @@
 package constants
 
-const ServiceName = "agent server"
+const ServiceName = "agent-cli"

@@ -2,44 +2,56 @@ package documentor
 
 import (
 	"context"
-	"log"
 
-	"google.golang.org/genai"
-
+	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
-	"google.golang.org/adk/model/gemini"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
 )
 
 type Documentor struct {
-	// TODO
-
+	inner agent.Agent
 }
 
-func NewDocumentorAgent(ctx context.Context) (*Documentor, error) {
-	model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{})
+// NewDocumentor returns a Documentor agent.
+func NewDocumentor(ctx context.Context, cfg *Config, model model.LLM) (*Documentor, error) {
+	// Configure documentor agent tools
+	fetchRepoTreeTool, err := NewFetchRepoTreeTool(cfg)
 	if err != nil {
-		log.Fatalf("failed to create model: %s", err)
+		return nil, err
 	}
 
-	// Copied from ADK examples/workflows
+	readRepoFileTool, err := NewReadRepoFileTool(cfg)
+	if err != nil {
+		return nil, err
+	}
 
-	// --- 1. Define Sub-Agents for Each Pipeline Stage ---
+	writeOutputTool, err := NewWriteOutputTool(cfg)
+	if err != nil {
+		return nil, err
+	}
 
-	// Code Writer Agent
-	// Takes the initial specification (from user query) and writes code.
-	_, err = llmagent.New(llmagent.Config{
-		Name:  "CodeWriterAgent",
-		Model: model,
-		Instruction: `You are a Python Code Generator.
-Based *only* on the user's request, write Python code that fulfills the requirement.
-Output *only* the complete Python code block, enclosed in triple backticks ('''python ... ''').
-Do not add any other text before or after the code block.`,
-		Description: "Writes initial Python code based on a specification.",
-		OutputKey:   "generated_code", // Stores output in state["generated_code"]
+	// Instantiate Documentor LLM agent
+	da, err := llmagent.New(llmagent.Config{
+		Name:        "documentor",
+		Model:       model,
+		Description: "Retrieves code from a GitHub repository and writes high-quality markdown documentation.",
+		Instruction: buildInstruction(),
+		Tools: []tool.Tool{
+			fetchRepoTreeTool, // Fetch Git Repository files
+			readRepoFileTool,  // Read files tool
+			writeOutputTool,   // Write output to file tool
+		},
+		OutputKey: StateDocumentation,
 	})
 	if err != nil {
-		log.Fatalf("failed to create codeWriterAgent: %s", err)
+		return nil, err
 	}
 
-	return &Documentor{}, nil
+	return &Documentor{inner: da}, nil
+}
+
+// Agent returns the inner agent interface (higher abstraction may not be necessary but we will see).
+func (d *Documentor) Agent() agent.Agent {
+	return d.inner
 }

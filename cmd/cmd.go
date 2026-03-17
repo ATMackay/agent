@@ -1,18 +1,18 @@
 package cmd
 
 import (
-	"code-agent/constants"
 	"fmt"
 
+	"github.com/ATMackay/agent/constants"
 	"github.com/spf13/cobra"
 )
 
 const EnvPrefix = "AGENT"
 
-func NewAgentCmd() *cobra.Command {
+func NewAgentCLICmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "agent [subcommand]",
-		Short: fmt.Sprintf("agent server command line interface.\n\nVERSION:\n  semver: %s\n  commit: %s\n  compilation date: %s",
+		Short: fmt.Sprintf("agent command line interface.\n\nVERSION:\n  semver: %s\n  commit: %s\n  compilation date: %s",
 			constants.Version, constants.GitCommit, constants.BuildDate),
 		RunE: runHelp,
 	}
