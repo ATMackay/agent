@@ -3,6 +3,7 @@ package documentor
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -29,6 +30,7 @@ type FetchRepoTreeResult struct {
 
 func newFetchRepoTreeTool(cfg *Config) func(tool.Context, FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
 	return func(ctx tool.Context, args FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
+		slog.Info("tool call", "function", "fetch_repo_tree", "args", toJSONString(args))
 		localPath, manifest, err := fetchRepoManifest(args.RepositoryURL, args.Ref, args.SubPath, cfg.WorkDir)
 		if err != nil {
 			return FetchRepoTreeResult{}, err
@@ -78,6 +80,7 @@ type ReadRepoFileResult struct {
 
 func newReadRepoFileTool() func(tool.Context, ReadRepoFileArgs) (ReadRepoFileResult, error) {
 	return func(ctx tool.Context, args ReadRepoFileArgs) (ReadRepoFileResult, error) {
+		slog.Info("tool call", "function", "read_repo_file", "args", toJSONString(args))
 		v, err := ctx.State().Get(StateRepoLocalPath)
 		if err != nil {
 			return ReadRepoFileResult{}, fmt.Errorf("read repo local path from state: %w", err)
@@ -138,6 +141,7 @@ type WriteOutputFileResult struct {
 
 func newWriteOutputFileTool() func(tool.Context, WriteOutputFileArgs) (WriteOutputFileResult, error) {
 	return func(ctx tool.Context, args WriteOutputFileArgs) (WriteOutputFileResult, error) {
+		slog.Info("tool call", "function", "write_output_file", "content_length", len(toJSONString(args)))
 		out := args.OutputPath
 		if out == "" {
 			v, err := ctx.State().Get(StateOutputPath)
@@ -181,4 +185,9 @@ func NewWriteOutputTool(_ *Config) (tool.Tool, error) {
 		return nil, fmt.Errorf("create write_output_file tool: %w", err)
 	}
 	return writeOutputTool, nil
+}
+
+func toJSONString(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }

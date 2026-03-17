@@ -1,6 +1,6 @@
 # Agent CLI - AI Agents with Google ADK
 
-This is a toy project to build AI agents using a pure Go stack. Exploring the capabilities of Google's [ADK](https://google.github.io/adk-docs/get-started/go/).
+This is a toy project to build AI agents using a pure Go stack and explore the capabilities of Google's [ADK](https://google.github.io/adk-docs/get-started/go/).
 
 ## Getting started 
 
@@ -19,5 +19,5 @@ make build
 
 Run the agent ()
 ```
-./build/agent-cli run documentor --repo https://github.com/ATMackay/agent.git --output doc.md -- model sonnet_4_5
+./build/agent-cli run documentor --repo https://github.com/ATMackay/agent.git --output agentcli-doc.md
 ```

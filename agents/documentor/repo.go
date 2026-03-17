@@ -3,39 +3,39 @@ package documentor
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
-	"log/slog"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
 
-const maxReadBytes = 128 * 1024
+const (
+	maxReadBytes     = 128 * 1024
+	maxManifestBytes = 512 * 1024
+	httpTimeout      = 90 * time.Second
+)
 
 func fetchRepoManifest(repoURL, ref, subPath, workDir string) (string, []FileEntry, error) {
-	owner, repo, err := parseGitHubRepoURL(repoURL)
+	if strings.TrimSpace(repoURL) == "" {
+		return "", nil, fmt.Errorf("repository URL is required")
+	}
+
+	root, err := fetchRepository(repoURL, ref, workDir)
 	if err != nil {
 		return "", nil, err
 	}
 
-	root, err := downloadAndExtractGitHubRepo(owner, repo, ref, workDir)
+	root, err = resolveSubPath(root, subPath)
 	if err != nil {
 		return "", nil, err
-	}
-
-	if subPath != "" {
-		root = filepath.Join(root, filepath.Clean(subPath))
-		info, err := os.Stat(root)
-		if err != nil {
-			return "", nil, fmt.Errorf("sub_path not found: %w", err)
-		}
-		if !info.IsDir() {
-			return "", nil, fmt.Errorf("sub_path is not a directory: %s", subPath)
-		}
 	}
 
 	manifest, err := buildManifest(root)
@@ -46,36 +46,50 @@ func fetchRepoManifest(repoURL, ref, subPath, workDir string) (string, []FileEnt
 	return root, manifest, nil
 }
 
-func parseGitHubRepoURL(repoURL string) (string, string, error) {
-	u, err := url.Parse(repoURL)
-	if err != nil {
-		return "", "", fmt.Errorf("invalid repository URL: %w", err)
-	}
-	if !strings.EqualFold(u.Host, "github.com") && !strings.EqualFold(u.Host, "www.github.com") {
-		return "", "", fmt.Errorf("only github.com repositories are supported")
-	}
-
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) < 2 {
-		return "", "", fmt.Errorf("repository URL must look like https://github.com/{owner}/{repo}")
-	}
-
-	owner := parts[0]
-	repo := strings.TrimSuffix(parts[1], ".git")
-	if owner == "" || repo == "" {
-		return "", "", fmt.Errorf("invalid GitHub repository URL")
-	}
-	return owner, repo, nil
-}
-
-func downloadAndExtractGitHubRepo(owner, repo, ref, workDir string) (string, error) {
+func fetchRepository(repoURL, ref, workDir string) (string, error) {
 	if workDir == "" {
 		workDir = os.TempDir()
 	}
 
-	dest, err := os.MkdirTemp(workDir, "repo-*")
+	// Prefer fast HTTPS archive fetch for public GitHub repos.
+	if owner, repo, ok := tryParseGitHubRepoURL(repoURL); ok {
+		root, err := downloadAndExtractGitHubRepo(owner, repo, ref, workDir)
+		if err == nil {
+			return root, nil
+		}
+		// Fall through to git CLI fallback.
+	}
+
+	return cloneRepoWithGit(repoURL, ref, workDir)
+}
+
+func tryParseGitHubRepoURL(repoURL string) (owner, repo string, ok bool) {
+	u, err := url.Parse(repoURL)
 	if err != nil {
-		return "", err
+		return "", "", false
+	}
+	host := strings.ToLower(u.Host)
+	if host != "github.com" && host != "www.github.com" {
+		return "", "", false
+	}
+
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+
+	owner = parts[0]
+	repo = strings.TrimSuffix(parts[1], ".git")
+	if owner == "" || repo == "" {
+		return "", "", false
+	}
+	return owner, repo, true
+}
+
+func downloadAndExtractGitHubRepo(owner, repo, ref, workDir string) (string, error) {
+	dest, err := os.MkdirTemp(workDir, "repo-http-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
 	}
 
 	archiveURL := fmt.Sprintf("https://codeload.github.com/%s/%s/tar.gz", owner, repo)
@@ -85,27 +99,23 @@ func downloadAndExtractGitHubRepo(owner, repo, ref, workDir string) (string, err
 
 	req, err := http.NewRequest(http.MethodGet, archiveURL, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("build archive request: %w", err)
 	}
 	req.Header.Set("User-Agent", "agent-documentor")
 
-	client := &http.Client{Timeout: 90 * time.Second}
+	client := &http.Client{Timeout: httpTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download repository archive: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Error("error closing body", "err", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download repository archive failed: %s", resp.Status)
 	}
 
-	if err := untarGz(resp.Body, dest); err != nil {
-		return "", err
+	if err := untarGzSafe(resp.Body, dest); err != nil {
+		return "", fmt.Errorf("extract repository archive: %w", err)
 	}
 
 	root, err := firstSubdir(dest)
@@ -115,34 +125,139 @@ func downloadAndExtractGitHubRepo(owner, repo, ref, workDir string) (string, err
 	return root, nil
 }
 
-func untarGz(r io.Reader, dest string) error {
+func cloneRepoWithGit(repoURL, ref, workDir string) (string, error) {
+	dest, err := os.MkdirTemp(workDir, "repo-git-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+
+	// Initialize empty repo so we can handle branch/tag/sha more flexibly.
+	if err := runGit(dest, "init"); err != nil {
+		return "", err
+	}
+	if err := runGit(dest, "remote", "add", "origin", repoURL); err != nil {
+		return "", err
+	}
+
+	ref = strings.TrimSpace(ref)
+
+	switch {
+	case ref == "":
+		// Default branch shallow fetch.
+		if err := runGit(dest, "fetch", "--depth", "1", "origin"); err != nil {
+			return "", fmt.Errorf("git fetch default branch: %w", err)
+		}
+		if err := runGit(dest, "checkout", "FETCH_HEAD"); err != nil {
+			return "", fmt.Errorf("git checkout default branch: %w", err)
+		}
+
+	case looksLikeCommitish(ref):
+		// Try exact commit-ish fetch.
+		if err := runGit(dest, "fetch", "--depth", "1", "origin", ref); err == nil {
+			if err := runGit(dest, "checkout", "FETCH_HEAD"); err != nil {
+				return "", fmt.Errorf("git checkout fetched ref: %w", err)
+			}
+			return dest, nil
+		}
+
+		// Fallback: fetch all refs shallowly and checkout the requested ref.
+		if err := runGit(dest, "fetch", "--depth", "1", "--tags", "origin"); err != nil {
+			return "", fmt.Errorf("git fetch tags for ref %q: %w", ref, err)
+		}
+		if err := runGit(dest, "fetch", "--depth", "1", "origin", ref); err == nil {
+			if err := runGit(dest, "checkout", "FETCH_HEAD"); err != nil {
+				return "", fmt.Errorf("git checkout ref %q: %w", ref, err)
+			}
+			return dest, nil
+		}
+		if err := runGit(dest, "checkout", ref); err != nil {
+			return "", fmt.Errorf("git checkout ref %q: %w", ref, err)
+		}
+
+	default:
+		// Branch or tag name.
+		if err := runGit(dest, "fetch", "--depth", "1", "--tags", "origin", ref); err == nil {
+			if err := runGit(dest, "checkout", "FETCH_HEAD"); err != nil {
+				return "", fmt.Errorf("git checkout ref %q: %w", ref, err)
+			}
+			return dest, nil
+		}
+
+		if err := runGit(dest, "fetch", "--depth", "1", "--tags", "origin"); err != nil {
+			return "", fmt.Errorf("git fetch for ref %q: %w", ref, err)
+		}
+		if err := runGit(dest, "checkout", ref); err != nil {
+			return "", fmt.Errorf("git checkout ref %q: %w", ref, err)
+		}
+	}
+
+	return dest, nil
+}
+
+func runGit(dir string, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+
+	// Avoid interactive prompts hanging the process.
+	env := os.Environ()
+	env = append(env, "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = env
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s failed: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func looksLikeCommitish(ref string) bool {
+	if len(ref) < 7 || len(ref) > 40 {
+		return false
+	}
+	for _, r := range ref {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+			return false
+		}
+	}
+	return true
+}
+
+func untarGzSafe(r io.Reader, dest string) error {
 	gzr, err := gzip.NewReader(r)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := gzr.Close(); err != nil {
-			slog.Error("error closing body", "err", err)
-		}
-	}()
+	defer gzr.Close()
 
 	tr := tar.NewReader(gzr)
+	cleanDest := filepath.Clean(dest)
+
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
 
-		target := filepath.Join(dest, filepath.Clean(hdr.Name))
+		name := filepath.Clean(hdr.Name)
+		if name == "." || name == "" {
+			continue
+		}
+
+		target := filepath.Join(cleanDest, name)
+		if !isWithinBase(cleanDest, target) {
+			return fmt.Errorf("archive entry escapes destination: %q", hdr.Name)
+		}
+
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
-		case tar.TypeReg:
+
+		case tar.TypeReg, tar.TypeRegA:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
@@ -150,13 +265,21 @@ func untarGz(r io.Reader, dest string) error {
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(f, tr); err != nil {
-				_ = f.Close()
-				return err
+			_, copyErr := io.Copy(f, tr)
+			closeErr := f.Close()
+			if copyErr != nil {
+				return copyErr
 			}
-			if err := f.Close(); err != nil {
-				return err
+			if closeErr != nil {
+				return closeErr
 			}
+
+		case tar.TypeSymlink, tar.TypeLink:
+			// Ignore links for safety/simplicity in v1.
+			continue
+
+		default:
+			continue
 		}
 	}
 }
@@ -164,7 +287,7 @@ func untarGz(r io.Reader, dest string) error {
 func firstSubdir(root string) (string, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read extracted repo dir: %w", err)
 	}
 	for _, e := range entries {
 		if e.IsDir() {
@@ -174,12 +297,35 @@ func firstSubdir(root string) (string, error) {
 	return "", fmt.Errorf("no extracted repository directory found")
 }
 
+func resolveSubPath(root, subPath string) (string, error) {
+	root = filepath.Clean(root)
+	if strings.TrimSpace(subPath) == "" {
+		return root, nil
+	}
+
+	cleanSub := filepath.Clean(subPath)
+	target := filepath.Join(root, cleanSub)
+	if !isWithinBase(root, target) {
+		return "", fmt.Errorf("invalid sub_path: %s", subPath)
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", fmt.Errorf("sub_path not found: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("sub_path is not a directory: %s", subPath)
+	}
+
+	return target, nil
+}
+
 func buildManifest(root string) ([]FileEntry, error) {
 	var manifest []FileEntry
 
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 
 		rel, err := filepath.Rel(root, path)
@@ -190,10 +336,22 @@ func buildManifest(root string) ([]FileEntry, error) {
 			return nil
 		}
 
-		if info.IsDir() {
+		rel = filepath.ToSlash(rel)
+
+		if d.IsDir() {
 			if shouldSkipDir(rel) {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+
+		// Skip symlinks entirely.
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
 			return nil
 		}
 
@@ -202,7 +360,7 @@ func buildManifest(root string) ([]FileEntry, error) {
 		}
 
 		manifest = append(manifest, FileEntry{
-			Path: filepath.ToSlash(rel),
+			Path: rel,
 			Kind: "file",
 			Size: info.Size(),
 		})
@@ -212,16 +370,39 @@ func buildManifest(root string) ([]FileEntry, error) {
 		return nil, err
 	}
 
+	sort.Slice(manifest, func(i, j int) bool {
+		return manifest[i].Path < manifest[j].Path
+	})
+
 	return manifest, nil
 }
 
 func readRepoFileFromCachedCheckout(localRoot, relPath string) (string, error) {
-	cleanRel := filepath.Clean(relPath)
-	fullPath := filepath.Join(localRoot, cleanRel)
+	if strings.TrimSpace(localRoot) == "" {
+		return "", fmt.Errorf("local repository root is required")
+	}
+	if strings.TrimSpace(relPath) == "" {
+		return "", fmt.Errorf("repository path is required")
+	}
 
-	if !strings.HasPrefix(fullPath, filepath.Clean(localRoot)+string(os.PathSeparator)) &&
-		filepath.Clean(fullPath) != filepath.Clean(localRoot) {
+	base := filepath.Clean(localRoot)
+	cleanRel := filepath.Clean(relPath)
+	fullPath := filepath.Join(base, cleanRel)
+
+	if !isWithinBase(base, fullPath) {
 		return "", fmt.Errorf("invalid repository path: %s", relPath)
+	}
+
+	// Reject symlinks.
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("stat repository file %s: %w", relPath, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("path is a directory, not a file: %s", relPath)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("symlinked files are not supported: %s", relPath)
 	}
 
 	b, err := os.ReadFile(fullPath)
@@ -235,9 +416,20 @@ func readRepoFileFromCachedCheckout(localRoot, relPath string) (string, error) {
 	return string(b), nil
 }
 
+func isWithinBase(base, target string) bool {
+	base = filepath.Clean(base)
+	target = filepath.Clean(target)
+
+	rel, err := filepath.Rel(base, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
+}
+
 func shouldSkipDir(rel string) bool {
 	switch filepath.Base(rel) {
-	case ".git", ".github", "vendor", "node_modules", "dist", "build", "bin":
+	case ".git", ".github", "vendor", "node_modules", "dist", "build", "bin", "coverage", ".next", ".turbo":
 		return true
 	default:
 		return false
@@ -245,12 +437,12 @@ func shouldSkipDir(rel string) bool {
 }
 
 func shouldIncludeFile(rel string, size int64) bool {
-	if size <= 0 || size > 512*1024 {
+	if size <= 0 || size > maxManifestBytes {
 		return false
 	}
 
 	switch strings.ToLower(filepath.Ext(rel)) {
-	case ".go", ".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".proto", ".sql", ".sh":
+	case ".go", ".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".proto", ".sql", ".sh", ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".rb", ".rs", ".c", ".h", ".cpp", ".hpp":
 		return true
 	default:
 		return false

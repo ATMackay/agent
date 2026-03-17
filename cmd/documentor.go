@@ -33,7 +33,7 @@ func NewDocumentorCmd() *cobra.Command {
 			// Prefer explicit flag, then env vars via Viper.
 			apiKey = viper.GetString("api-key")
 			if apiKey == "" {
-				return fmt.Errorf("google api key is required; set --api-key or export API_KEY")
+				return fmt.Errorf("Google Gemini or Claude api key is required; set --api-key or export API_KEY")
 			}
 			if repoURL == "" {
 				return fmt.Errorf("--repo is required")
@@ -53,7 +53,6 @@ func NewDocumentorCmd() *cobra.Command {
 			}()
 
 			cfg := &documentor.Config{WorkDir: workDir}
-			cfg = cfg.SetDefaults()
 			if err := cfg.Validate(); err != nil {
 				return fmt.Errorf("invalid config: %w", err)
 			}
@@ -129,18 +128,17 @@ func NewDocumentorCmd() *cobra.Command {
 				},
 			}
 
+			slog.Info(
+				"running documentor agent",
+				"session_id", resp.Session.ID(),
+			)
+
 			for event, err := range r.Run(ctx, userCLI, resp.Session.ID(), userMsg, agentpkg.RunConfig{}) {
 				if err != nil {
 					return fmt.Errorf("agent error: %w", err)
 				}
 				// handle event (log)
-				slog.Info("event", "branch", event.Branch)
-				// Log function calls TODO
-				// if event.Content != nil && len(event.Content.Parts) != 0 {
-				// 	for _, fc := range event.Content.Parts {
-				// 		slog.Info("function call", "function", fc.FunctionCall.Name, "input", fc.Text)
-				// 	}
-				// }
+				slog.Info("event", "id", event.ID, "author", event.Author)
 			}
 
 			if _, err := os.Stat(output); err != nil {

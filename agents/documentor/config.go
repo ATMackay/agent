@@ -7,13 +7,6 @@ type Config struct {
 	WorkDir string
 }
 
-func (c *Config) SetDefaults() *Config {
-	if c.WorkDir == "" {
-		c.WorkDir = "."
-	}
-	return c
-}
-
 func (c Config) Validate() error {
 	// ensure workdir is either explicitly set or defaults are set
 	// Empty workdir not allowed
