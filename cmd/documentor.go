@@ -5,16 +5,17 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/ATMackay/agent/agents/documentor"
+	"github.com/ATMackay/agent/model"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	agentpkg "google.golang.org/adk/agent"
-	"google.golang.org/adk/model/gemini"
 	"google.golang.org/adk/runner"
 	"google.golang.org/adk/session"
 	"google.golang.org/genai"
-
-	"github.com/ATMackay/agent/agents/documentor"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
+
+const userCLI = "cli-user"
 
 func NewDocumentorCmd() *cobra.Command {
 	var repoURL string
@@ -22,7 +23,7 @@ func NewDocumentorCmd() *cobra.Command {
 	var pathPrefix string
 	var output string
 	var maxFiles int
-	var modelName string
+	var modelName, modelProvider string
 	var apiKey string
 
 	cmd := &cobra.Command{
@@ -30,9 +31,9 @@ func NewDocumentorCmd() *cobra.Command {
 		Short: "Run the code documentation agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Prefer explicit flag, then env vars via Viper.
-			apiKey = viper.GetString("google-api-key")
+			apiKey = viper.GetString("api-key")
 			if apiKey == "" {
-				return fmt.Errorf("google api key is required; set --google-api-key or export GOOGLE_API_KEY")
+				return fmt.Errorf("google api key is required; set --api-key or export API_KEY")
 			}
 			if repoURL == "" {
 				return fmt.Errorf("--repo is required")
@@ -63,15 +64,17 @@ func NewDocumentorCmd() *cobra.Command {
 				"creating documentor agent",
 				"dir", workDir,
 				"model", modelName,
+				"provider", modelProvider,
 				"output", output,
 				"repoURL", repoURL,
 			)
 
-			// Start with Gemini models
-			// TODO create abstraction and package to support arbitrary model types.
-			mod, err := gemini.NewModel(ctx, modelName, &genai.ClientConfig{
-				APIKey: apiKey,
-			})
+			// Select model provider. Supported providers: 'claude' or gemini.
+			modelCfg := &model.Config{
+				Provider: model.Provider(modelProvider),
+				Model:    modelName,
+			}
+			mod, err := model.New(ctx, modelCfg.WithAPIKey(apiKey))
 			if err != nil {
 				return fmt.Errorf("create model: %w", err)
 			}
@@ -109,7 +112,7 @@ func NewDocumentorCmd() *cobra.Command {
 
 			resp, err := sessService.Create(ctx, &session.CreateRequest{
 				AppName: "documentor",
-				UserID:  "cli-user",
+				UserID:  userCLI,
 				State:   initState,
 			})
 			if err != nil {
@@ -126,12 +129,18 @@ func NewDocumentorCmd() *cobra.Command {
 				},
 			}
 
-			for event, err := range r.Run(ctx, "cli-user", resp.Session.ID(), userMsg, agentpkg.RunConfig{}) {
+			for event, err := range r.Run(ctx, userCLI, resp.Session.ID(), userMsg, agentpkg.RunConfig{}) {
 				if err != nil {
 					return fmt.Errorf("agent error: %w", err)
 				}
 				// handle event (log)
-				slog.Info("event", "response_content", event.Content, "branch", event.Branch)
+				slog.Info("event", "branch", event.Branch)
+				// Log function calls TODO
+				// if event.Content != nil && len(event.Content.Parts) != 0 {
+				// 	for _, fc := range event.Content.Parts {
+				// 		slog.Info("function call", "function", fc.FunctionCall.Name, "input", fc.Text)
+				// 	}
+				// }
 			}
 
 			if _, err := os.Stat(output); err != nil {
@@ -147,8 +156,9 @@ func NewDocumentorCmd() *cobra.Command {
 	cmd.Flags().StringVar(&ref, "ref", "", "Optional branch, tag, or commit")
 	cmd.Flags().StringVar(&pathPrefix, "path", "", "Optional subdirectory to document")
 	cmd.Flags().StringVar(&output, "output", "", "Output file path for the generated markdown")
-	cmd.Flags().IntVar(&maxFiles, "max-files", 20, "Maximum number of files to read")
-	cmd.Flags().StringVar(&modelName, "model", "gemini-2.5-pro", "Gemini model to use")
+	cmd.Flags().IntVar(&maxFiles, "max-files", 50, "Maximum number of files to read")
+	cmd.Flags().StringVar(&modelName, "model", "", "LLM to use")
+	cmd.Flags().StringVar(&modelProvider, "provider", "claude", "LLM provider to use (claude or gemini)")
 
 	// Bind flags to environment variables
 	must(viper.BindPFlag("repo", cmd.Flags().Lookup("repo")))
@@ -157,9 +167,10 @@ func NewDocumentorCmd() *cobra.Command {
 	must(viper.BindPFlag("output", cmd.Flags().Lookup("output")))
 	must(viper.BindPFlag("max-files", cmd.Flags().Lookup("max-files")))
 	must(viper.BindPFlag("model", cmd.Flags().Lookup("model")))
+	must(viper.BindPFlag("provider", cmd.Flags().Lookup("provider")))
 
-	// GOOGLE_API_KEY is preferred, GEMINI_API_KEY is accepted as fallback.
-	must(viper.BindEnv("google-api-key", "GOOGLE_API_KEY", "GEMINI_API_KEY"))
+	// API_KEY is preferred, GOOGLE_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY are accepted as fallback.
+	must(viper.BindEnv("api-key", "API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "CLAUDE_API_KEY"))
 
 	return cmd
 }

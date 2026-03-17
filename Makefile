@@ -8,7 +8,7 @@ UNIT_COVERAGE_OUT        ?= $(COVERAGE_BUILD_FOLDER)/ut_cov.out
 BIN                      ?= $(BUILD_FOLDER)/agent-cli
 
 # Packages
-PKG                      ?= github.com/ATMackay/agent-cli
+PKG                      ?= github.com/ATMackay/agent
 CONSTANTS_PKG            ?= $(PKG)/constants
 
 
@@ -20,6 +20,14 @@ COMMIT_DATE    ?= $(shell TZ=UTC git show -s --format=%cd --date=format:%Y-%m-%d
 ifndef DIRTY
 DIRTY := $(shell if [ -n "$$(git status --porcelain 2>/dev/null)" ]; then echo true; else echo false; fi)
 endif
+
+LDFLAGS := -s -w \
+  -X '$(CONSTANTS_PKG).Version=$(VERSION_TAG)' \
+  -X '$(CONSTANTS_PKG).CommitDate=$(COMMIT_DATE)' \
+  -X '$(CONSTANTS_PKG).GitCommit=$(GIT_COMMIT)' \
+  -X '$(CONSTANTS_PKG).BuildDate=$(BUILD_DATE)' \
+  -X '$(CONSTANTS_PKG).Dirty=$(DIRTY)'
+
 
 build:
 	@mkdir -p build
