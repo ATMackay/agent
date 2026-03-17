@@ -33,7 +33,7 @@ func NewDocumentorCmd() *cobra.Command {
 			// Prefer explicit flag, then env vars via Viper.
 			apiKey = viper.GetString("api-key")
 			if apiKey == "" {
-				return fmt.Errorf("Google Gemini or Claude api key is required; set --api-key or export API_KEY")
+				return fmt.Errorf("google gemini or claude api key is required; set --api-key or export API_KEY")
 			}
 			if repoURL == "" {
 				return fmt.Errorf("--repo is required")

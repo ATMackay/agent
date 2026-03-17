@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -108,7 +109,11 @@ func downloadAndExtractGitHubRepo(owner, repo, ref, workDir string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("download repository archive: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("error closing body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download repository archive failed: %s", resp.Status)
@@ -227,7 +232,11 @@ func untarGzSafe(r io.Reader, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer gzr.Close()
+	defer func() {
+		if err := gzr.Close(); err != nil {
+			slog.Error("error closing body", "error", err)
+		}
+	}()
 
 	tr := tar.NewReader(gzr)
 	cleanDest := filepath.Clean(dest)
@@ -257,7 +266,7 @@ func untarGzSafe(r io.Reader, dest string) error {
 				return err
 			}
 
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
