@@ -1,6 +1,6 @@
-package documentor
+package tools
 
-// Session state keys used by the documentor agent.
+// Session state keys. TODO agent specific, might refactor...
 const (
 	StateRepoURL    = "repo_url"
 	StateRepoRef    = "repo_ref"

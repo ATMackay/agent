@@ -1,8 +1,9 @@
-package documentor
+package tools
 
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
 )
 
 const (
@@ -23,6 +27,68 @@ const (
 	maxManifestBytes = 512 * 1024
 	httpTimeout      = 90 * time.Second
 )
+
+type FetchRepoTreeConfig struct {
+	WorkDir string
+}
+
+type FetchRepoTreeArgs struct {
+	RepositoryURL string `json:"repository_url"`
+	Ref           string `json:"ref,omitempty"`
+	SubPath       string `json:"sub_path,omitempty"`
+}
+
+type FileEntry struct {
+	Path string `json:"path"`
+	Kind string `json:"kind"`
+	Size int64  `json:"size,omitempty"`
+}
+
+type FetchRepoTreeResult struct {
+	FileCount int         `json:"file_count"`
+	Manifest  []FileEntry `json:"manifest"`
+}
+
+// NewFetchRepoTool returns a fetch_repo_tree function tool.
+func NewFetchRepoTreeTool(workDir string) (tool.Tool, error) {
+	fetchRepoTreeTool, err := functiontool.New(
+		functiontool.Config{
+			Name:        "fetch_repo_tree",
+			Description: "Download the GitHub repository to a local cache, build a source-file manifest, and store both in state.",
+		},
+		newFetchRepoTreeTool(workDir),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create fetch_repo_tree tool: %w", err)
+	}
+	return fetchRepoTreeTool, nil
+}
+
+func newFetchRepoTreeTool(workDir string) func(tool.Context, FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
+	return func(ctx tool.Context, args FetchRepoTreeArgs) (FetchRepoTreeResult, error) {
+		slog.Info("tool call", "function", "fetch_repo_tree", "args", toJSONString(args))
+		localPath, manifest, err := fetchRepoManifest(args.RepositoryURL, args.Ref, args.SubPath, workDir)
+		if err != nil {
+			return FetchRepoTreeResult{}, err
+		}
+
+		raw, err := json.Marshal(manifest)
+		if err != nil {
+			return FetchRepoTreeResult{}, err
+		}
+
+		ctx.Actions().StateDelta[StateRepoURL] = args.RepositoryURL
+		ctx.Actions().StateDelta[StateRepoRef] = args.Ref
+		ctx.Actions().StateDelta[StateSubPath] = args.SubPath
+		ctx.Actions().StateDelta[StateRepoManifest] = string(raw)
+		ctx.Actions().StateDelta[StateRepoLocalPath] = localPath
+
+		return FetchRepoTreeResult{
+			FileCount: len(manifest),
+			Manifest:  manifest,
+		}, nil
+	}
+}
 
 func fetchRepoManifest(repoURL, ref, subPath, workDir string) (string, []FileEntry, error) {
 	if strings.TrimSpace(repoURL) == "" {

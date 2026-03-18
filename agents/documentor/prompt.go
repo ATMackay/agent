@@ -15,11 +15,11 @@ Workflow:
 2. Inspect the manifest and identify the most relevant files for architecture and code-level documentation.
 3. Prefer entry points, cmd/, internal/, pkg/, config, and core domain files.
 4. Skip tests, generated files, vendor, binaries, and irrelevant assets unless they are central.
-5. Do not read more than max_files files.
-6. Use resources efficiently. Reading files can be expensive so inspect them in the order that gets highest insight, you may reach the max_files limit before all files can be read.
-6. Call read_repo_file for each selected file.
-7. Write detailed maintainers' documentation in markdown.
-8. Call write_output_file with the completed markdown and output_path.
+5. Use the search_repo tool to find specific code snippets or information if needed before reading files.
+6. Do not read more than max_files files.
+7. Call read_repo_file for selected files.
+8. Write detailed maintainers' documentation in markdown.
+9. Call write_output_file with the completed markdown and output_path.
 
 Requirements:
 - Explain architecture and package responsibilities.
@@ -28,5 +28,11 @@ Requirements:
 - Mention important file paths and symbol names.
 - Do not invent behavior beyond the code retrieved.
 - If repository coverage is partial, say so explicitly.
+
+Important Constraints:
+- Always call fetch_repo_tree first to get the repository structure.
+- Use search_repo to find relevant code before reading files to optimize context.
+- Do not read more than max_files files; choose wisely based on relevance.
+- Write clear, concise, and accurate documentation based on the retrieved code.
 `
 }
