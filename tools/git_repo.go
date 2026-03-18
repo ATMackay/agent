@@ -452,45 +452,6 @@ func buildManifest(root string) ([]FileEntry, error) {
 	return manifest, nil
 }
 
-func readRepoFileFromCachedCheckout(localRoot, relPath string) (string, error) {
-	if strings.TrimSpace(localRoot) == "" {
-		return "", fmt.Errorf("local repository root is required")
-	}
-	if strings.TrimSpace(relPath) == "" {
-		return "", fmt.Errorf("repository path is required")
-	}
-
-	base := filepath.Clean(localRoot)
-	cleanRel := filepath.Clean(relPath)
-	fullPath := filepath.Join(base, cleanRel)
-
-	if !isWithinBase(base, fullPath) {
-		return "", fmt.Errorf("invalid repository path: %s", relPath)
-	}
-
-	// Reject symlinks.
-	info, err := os.Lstat(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("stat repository file %s: %w", relPath, err)
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("path is a directory, not a file: %s", relPath)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("symlinked files are not supported: %s", relPath)
-	}
-
-	b, err := os.ReadFile(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("read repository file %s: %w", relPath, err)
-	}
-
-	if len(b) > maxReadBytes {
-		b = b[:maxReadBytes]
-	}
-	return string(b), nil
-}
-
 func isWithinBase(base, target string) bool {
 	base = filepath.Clean(base)
 	target = filepath.Clean(target)
