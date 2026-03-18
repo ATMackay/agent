@@ -10,7 +10,7 @@ import (
 )
 
 type Documentor struct {
-	inner agent.Agent
+	agent.Agent
 }
 
 // NewDocumentor returns a Documentor agent.
@@ -42,10 +42,5 @@ func NewDocumentor(ctx context.Context, cfg *Config, model model.LLM) (*Document
 		return nil, err
 	}
 
-	return &Documentor{inner: da}, nil
-}
-
-// Agent returns the inner agent interface (higher abstraction may not be necessary but we will see).
-func (d *Documentor) Agent() agent.Agent {
-	return d.inner
+	return &Documentor{Agent: da}, nil
 }
