@@ -17,7 +17,9 @@ Build agent CLI
 make build
 ```
 
-Run the agent ()
+Run the documentation agent
 ```
-./build/agent-cli run documentor --repo https://github.com/ATMackay/agent.git --output agentcli-doc.md
+./build/agent-cli run documentor --repo https://github.com/ATMackay/agent
 ```
+
+Documentation will be written to `doc.agentcli.md`.
