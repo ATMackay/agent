@@ -8,6 +8,7 @@ import (
 
 	"github.com/ATMackay/agent/agents/documentor"
 	"github.com/ATMackay/agent/model"
+	"github.com/ATMackay/agent/tools"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	agentpkg "google.golang.org/adk/agent"
@@ -101,13 +102,13 @@ func NewDocumentorCmd() *cobra.Command {
 			}
 
 			initState := map[string]any{
-				documentor.StateRepoURL:    repoURL,
-				documentor.StateRepoRef:    ref,
-				documentor.StateOutputPath: output,
-				documentor.StateMaxFiles:   maxFiles,
+				tools.StateRepoURL:    repoURL,
+				tools.StateRepoRef:    ref,
+				tools.StateOutputPath: output,
+				tools.StateMaxFiles:   maxFiles,
 			}
 			if pathPrefix != "" {
-				initState[documentor.StateSubPath] = pathPrefix
+				initState[tools.StateSubPath] = pathPrefix
 			}
 
 			resp, err := sessService.Create(ctx, &session.CreateRequest{

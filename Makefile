@@ -39,7 +39,7 @@ install: build
 	mv $(BIN) $(GOBIN)
 
 run: build
-	@./$(BUILD_FOLDER)/agent-cli run documentor --repo https://github.com/ATMackay/agent.git
+	@./$(BUILD_FOLDER)/agent-cli run documentor --repo https://github.com/ATMackay/agent
 
 test: 
 	@mkdir -p $(COVERAGE_BUILD_FOLDER)

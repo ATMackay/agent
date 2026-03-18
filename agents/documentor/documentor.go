@@ -3,10 +3,10 @@ package documentor
 import (
 	"context"
 
+	"github.com/ATMackay/agent/tools"
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model"
-	"google.golang.org/adk/tool"
 )
 
 type Documentor struct {
@@ -15,18 +15,16 @@ type Documentor struct {
 
 // NewDocumentor returns a Documentor agent.
 func NewDocumentor(ctx context.Context, cfg *Config, model model.LLM) (*Documentor, error) {
-	// Configure documentor agent tools
-	fetchRepoTreeTool, err := NewFetchRepoTreeTool(cfg)
-	if err != nil {
-		return nil, err
-	}
+	// Configure documentor agent tools and dependencies.
+	deps := tools.Deps{}
+	deps.AddConfig(tools.FetchRepoTree, tools.FetchRepoTreeConfig{WorkDir: cfg.WorkDir})
 
-	readRepoFileTool, err := NewReadRepoFileTool(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	writeOutputTool, err := NewWriteOutputTool(cfg)
+	functionTools, err := tools.GetTools([]tools.Kind{
+		tools.FetchRepoTree, // Fetch repository tree to understand the structure of the codebase.
+		tools.ReadFile,      // Read specific files to understand code details and extract relevant information for documentation.
+		tools.SearchRepo,    // Search the repository to find relevant code snippets or information.
+		tools.WriteFile,     // Write documentation or other output files.
+	}, &deps)
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +35,8 @@ func NewDocumentor(ctx context.Context, cfg *Config, model model.LLM) (*Document
 		Model:       model,
 		Description: "Retrieves code from a GitHub repository and writes high-quality markdown documentation.",
 		Instruction: buildInstruction(),
-		Tools: []tool.Tool{
-			fetchRepoTreeTool, // Fetch Git Repository files
-			readRepoFileTool,  // Read files tool
-			writeOutputTool,   // Write output to file tool
-		},
-		OutputKey: StateDocumentation,
+		Tools:       functionTools,
+		OutputKey:   tools.StateDocumentation,
 	})
 	if err != nil {
 		return nil, err
