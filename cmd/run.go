@@ -21,10 +21,6 @@ func NewRunCmd() *cobra.Command {
 			if err := initLogging(logLevel, logFormat); err != nil {
 				return fmt.Errorf("failed to initialize logger: %w", err)
 			}
-
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
 			if isBuildDirty() {
 				slog.Warn("running a DIRTY build (uncommitted changes present) — do not run in production")
 			}
@@ -43,12 +39,12 @@ func NewRunCmd() *cobra.Command {
 	// TODO - more agent types
 
 	// Bind flags and ENV vars
-	cmd.Flags().String("log-level", "info", "Log level (debug, info, warn, error, fatal, panic)")
-	cmd.Flags().String("log-format", "text", "Log format (text, json)")
+	cmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error, fatal, panic)")
+	cmd.PersistentFlags().String("log-format", "text", "Log format (text, json)")
 
 	// Bind flags to environment variables
-	must(viper.BindPFlag("log-level", cmd.Flags().Lookup("log-level")))
-	must(viper.BindPFlag("log-format", cmd.Flags().Lookup("log-format")))
+	must(viper.BindPFlag("log-level", cmd.PersistentFlags().Lookup("log-level")))
+	must(viper.BindPFlag("log-format", cmd.PersistentFlags().Lookup("log-format")))
 
 	// Set environment variable prefix and read from environment
 	viper.SetEnvPrefix(EnvPrefix) // Environment variables will be prefixed with CHECKOUT_

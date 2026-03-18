@@ -3,3 +3,4 @@ agent
 build/*
 docs/generated
 data
+*agentcli.md

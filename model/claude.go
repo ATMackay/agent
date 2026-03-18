@@ -15,7 +15,7 @@ func newClaude(ctx context.Context, cfg *Config) (model.LLM, error) {
 		return nil, fmt.Errorf("anthropic api key is required for claude")
 	}
 	if cfg.Model == "" {
-		cfg.Model = string(anthropic.ModelClaudeSonnet4_20250514)
+		cfg.Model = string(anthropic.ModelClaudeOpus4_1_20250805)
 	}
 	return anthropicadk.NewModel(cfg.Model, anthropicadk.AnthropicOption(option.WithAPIKey(cfg.apiKey))), nil
 }

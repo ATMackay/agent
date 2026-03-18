@@ -16,6 +16,7 @@ Workflow:
 3. Prefer entry points, cmd/, internal/, pkg/, config, and core domain files.
 4. Skip tests, generated files, vendor, binaries, and irrelevant assets unless they are central.
 5. Do not read more than max_files files.
+6. Use resources efficiently. Reading files can be expensive so inspect them in the order that gets highest insight, you may reach the max_files limit before all files can be read.
 6. Call read_repo_file for each selected file.
 7. Write detailed maintainers' documentation in markdown.
 8. Call write_output_file with the completed markdown and output_path.

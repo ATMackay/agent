@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/ATMackay/agent/agents/documentor"
 	"github.com/ATMackay/agent/model"
@@ -133,13 +134,24 @@ func NewDocumentorCmd() *cobra.Command {
 				"session_id", resp.Session.ID(),
 			)
 
+			start := time.Now()
 			for event, err := range r.Run(ctx, userCLI, resp.Session.ID(), userMsg, agentpkg.RunConfig{}) {
 				if err != nil {
 					return fmt.Errorf("agent error: %w", err)
 				}
 				// handle event (log)
-				slog.Info("event", "id", event.ID, "author", event.Author)
+				if event.UsageMetadata == nil {
+					continue
+				}
+				slog.Info("event", "author", event.Author, "event_id", event.ID, "prompt_tokens", event.UsageMetadata.PromptTokenCount, "total_tokens", event.UsageMetadata.TotalTokenCount)
+				if event.Content == nil {
+					continue
+				}
+				for _, p := range event.Content.Parts {
+					slog.Debug("response_content", "role", event.Content.Role, "text", p.Text, "function_call", p.FunctionCall)
+				}
 			}
+			slog.Info("Agent execution complete", "time_taken", time.Since(start))
 
 			if _, err := os.Stat(output); err != nil {
 				return fmt.Errorf("agent finished but output file was not created: %w", err)
@@ -153,9 +165,9 @@ func NewDocumentorCmd() *cobra.Command {
 	cmd.Flags().StringVar(&repoURL, "repo", "", "GitHub repository URL")
 	cmd.Flags().StringVar(&ref, "ref", "", "Optional branch, tag, or commit")
 	cmd.Flags().StringVar(&pathPrefix, "path", "", "Optional subdirectory to document")
-	cmd.Flags().StringVar(&output, "output", "", "Output file path for the generated markdown")
+	cmd.Flags().StringVar(&output, "output", "doc.agentcli.md", "Output file path for the generated markdown")
 	cmd.Flags().IntVar(&maxFiles, "max-files", 50, "Maximum number of files to read")
-	cmd.Flags().StringVar(&modelName, "model", "", "LLM to use")
+	cmd.Flags().StringVar(&modelName, "model", "claude-opus-4-1-20250805", "Language model to use")
 	cmd.Flags().StringVar(&modelProvider, "provider", "claude", "LLM provider to use (claude or gemini)")
 
 	// Bind flags to environment variables
