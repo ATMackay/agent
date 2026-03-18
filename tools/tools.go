@@ -28,16 +28,12 @@ func GetToolByEnum(kind Kind, deps *Deps) (tool.Tool, error) {
 			return nil, fmt.Errorf("fetch_repo_tree requires WorkDir")
 		}
 		return NewFetchRepoTreeTool(cfg.WorkDir)
-
 	case ReadFile:
 		return NewReadFileTool()
-
 	case SearchRepo:
 		return NewSearchRepoTool()
-
 	case WriteFile:
 		return NewWriteFileTool()
-
 	default:
 		return nil, fmt.Errorf("invalid tool kind: %q", kind)
 	}
