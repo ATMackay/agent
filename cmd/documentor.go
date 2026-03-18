@@ -87,14 +87,14 @@ func NewDocumentorCmd() *cobra.Command {
 
 			slog.Info(
 				"created agent",
-				"agent_name", docAgent.Agent().Name(),
-				"agent_description", docAgent.Agent().Description(),
+				"agent_name", docAgent.Name(),
+				"agent_description", docAgent.Description(),
 			)
 
 			sessService := session.InMemoryService()
 			r, err := runner.New(runner.Config{
 				AppName:        "documentor",
-				Agent:          docAgent.Agent(),
+				Agent:          docAgent,
 				SessionService: sessService,
 			})
 			if err != nil {
