@@ -144,12 +144,25 @@ func NewDocumentorCmd() *cobra.Command {
 				if event.UsageMetadata == nil {
 					continue
 				}
-				slog.Info("event", "author", event.Author, "event_id", event.ID, "prompt_tokens", event.UsageMetadata.PromptTokenCount, "total_tokens", event.UsageMetadata.TotalTokenCount)
+				slog.Info("tokens_used",
+					"event_id", event.ID,
+					"author", event.Author,
+					"total_tokens", event.UsageMetadata.TotalTokenCount,
+					"prompt_tokens", event.UsageMetadata.PromptTokenCount,
+					"tool_use_token_count", event.UsageMetadata.ToolUsePromptTokenCount,
+					"thought_token_count", event.UsageMetadata.ThoughtsTokenCount,
+				)
 				if event.Content == nil {
 					continue
 				}
 				for _, p := range event.Content.Parts {
-					slog.Debug("response_content", "role", event.Content.Role, "text", p.Text, "function_call", p.FunctionCall)
+					slog.Debug("response_content",
+						"event_id", event.ID,
+						"role", event.Content.Role,
+						"text", p.Text,
+						"function_call", p.FunctionCall,
+						"function_response", p.FunctionResponse,
+					)
 				}
 			}
 			slog.Info("Agent execution complete", "time_taken", time.Since(start))
