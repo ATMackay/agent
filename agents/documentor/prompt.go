@@ -1,5 +1,7 @@
 package documentor
 
+import "google.golang.org/genai"
+
 func buildInstruction() string {
 	return `
 You are a code documentation agent.
@@ -68,4 +70,17 @@ Decision Rule:
 Before each file read, ask: “What specific question am I trying to answer from this file?”
 If that question is not specific, search first instead of reading.
 `
+}
+
+// UserMessage returns the initial user message for the documentor service.
+func UserMessage() *genai.Content {
+	return &genai.Content{
+		Role: "user",
+		Parts: []*genai.Part{
+			{
+				Text: "Generate detailed code documentation for the configured repository. " +
+					"Use fetch_repo_tree first, then read relevant files, then write the markdown output file.",
+			},
+		},
+	}
 }

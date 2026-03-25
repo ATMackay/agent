@@ -4,17 +4,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/ATMackay/agent/agents/documentor"
 	"github.com/ATMackay/agent/model"
 	"github.com/ATMackay/agent/tools"
+	"github.com/ATMackay/agent/workflow"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	agentpkg "google.golang.org/adk/agent"
-	"google.golang.org/adk/runner"
 	"google.golang.org/adk/session"
-	"google.golang.org/genai"
 )
 
 const userCLI = "cli-user"
@@ -91,16 +88,6 @@ func NewDocumentorCmd() *cobra.Command {
 				"agent_description", docAgent.Description(),
 			)
 
-			sessService := session.InMemoryService()
-			r, err := runner.New(runner.Config{
-				AppName:        "documentor",
-				Agent:          docAgent,
-				SessionService: sessService,
-			})
-			if err != nil {
-				return fmt.Errorf("create runner: %w", err)
-			}
-
 			initState := map[string]any{
 				tools.StateRepoURL:    repoURL,
 				tools.StateRepoRef:    ref,
@@ -111,61 +98,16 @@ func NewDocumentorCmd() *cobra.Command {
 				initState[tools.StateSubPath] = pathPrefix
 			}
 
-			resp, err := sessService.Create(ctx, &session.CreateRequest{
-				AppName: "documentor",
-				UserID:  userCLI,
-				State:   initState,
-			})
+			s, err := workflow.New(ctx, "documentor", session.InMemoryService(), docAgent, initState)
 			if err != nil {
-				return fmt.Errorf("create session: %w", err)
+				return fmt.Errorf("create runner: %w", err)
 			}
 
-			userMsg := &genai.Content{
-				Role: "user",
-				Parts: []*genai.Part{
-					{
-						Text: "Generate detailed code documentation for the configured repository. " +
-							"Use fetch_repo_tree first, then read relevant files, then write the markdown output file.",
-					},
-				},
-			}
+			userMsg := documentor.UserMessage()
 
-			slog.Info(
-				"running documentor agent",
-				"session_id", resp.Session.ID(),
-			)
-
-			start := time.Now()
-			for event, err := range r.Run(ctx, userCLI, resp.Session.ID(), userMsg, agentpkg.RunConfig{}) {
-				if err != nil {
-					return fmt.Errorf("agent error: %w", err)
-				}
-				// handle event (log)
-				if event.UsageMetadata == nil {
-					continue
-				}
-				slog.Info("tokens_used",
-					"event_id", event.ID,
-					"author", event.Author,
-					"total_tokens", event.UsageMetadata.TotalTokenCount,
-					"prompt_tokens", event.UsageMetadata.PromptTokenCount,
-					"tool_use_token_count", event.UsageMetadata.ToolUsePromptTokenCount,
-					"thought_token_count", event.UsageMetadata.ThoughtsTokenCount,
-				)
-				if event.Content == nil {
-					continue
-				}
-				for _, p := range event.Content.Parts {
-					slog.Debug("response_content",
-						"event_id", event.ID,
-						"role", event.Content.Role,
-						"text", p.Text,
-						"function_call", p.FunctionCall,
-						"function_response", p.FunctionResponse,
-					)
-				}
+			if err := s.Start(ctx, userCLI, userMsg); err != nil {
+				return err
 			}
-			slog.Info("Agent execution complete", "time_taken", time.Since(start))
 
 			if _, err := os.Stat(output); err != nil {
 				return fmt.Errorf("agent finished but output file was not created: %w", err)
