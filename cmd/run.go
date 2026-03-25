@@ -36,6 +36,7 @@ func NewRunCmd() *cobra.Command {
 
 	// Add subcommands
 	cmd.AddCommand(NewDocumentorCmd())
+	cmd.AddCommand(NewAnalyzerCmd())
 	// TODO - more agent types
 
 	// Bind flags and ENV vars

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ATMackay/agent/state"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 )
@@ -39,7 +40,7 @@ func newWriteFileTool() func(tool.Context, WriteFileArgs) (WriteFileResult, erro
 		slog.Info("tool call", "function", string(WriteFile), "content_length", len(toJSONString(args)))
 		out := args.OutputPath
 		if out == "" {
-			v, err := ctx.State().Get(StateOutputPath)
+			v, err := ctx.State().Get(state.StateOutputPath)
 			if err == nil {
 				if s, ok := v.(string); ok {
 					out = s
@@ -54,7 +55,7 @@ func newWriteFileTool() func(tool.Context, WriteFileArgs) (WriteFileResult, erro
 			return WriteFileResult{}, err
 		}
 
-		ctx.Actions().StateDelta[StateDocumentation] = args.Markdown
+		ctx.Actions().StateDelta[state.StateDocumentation] = args.Markdown
 		return WriteFileResult{Path: out}, nil
 	}
 }

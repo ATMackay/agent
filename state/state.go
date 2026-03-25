@@ -1,4 +1,4 @@
-package tools
+package state
 
 // Session state keys. TODO agent specific, might refactor...
 const (

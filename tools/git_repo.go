@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ATMackay/agent/state"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 )
@@ -77,11 +78,11 @@ func newFetchRepoTreeTool(workDir string) func(tool.Context, FetchRepoTreeArgs) 
 			return FetchRepoTreeResult{}, err
 		}
 
-		ctx.Actions().StateDelta[StateRepoURL] = args.RepositoryURL
-		ctx.Actions().StateDelta[StateRepoRef] = args.Ref
-		ctx.Actions().StateDelta[StateSubPath] = args.SubPath
-		ctx.Actions().StateDelta[StateRepoManifest] = string(raw)
-		ctx.Actions().StateDelta[StateRepoLocalPath] = localPath
+		ctx.Actions().StateDelta[state.StateRepoURL] = args.RepositoryURL
+		ctx.Actions().StateDelta[state.StateRepoRef] = args.Ref
+		ctx.Actions().StateDelta[state.StateSubPath] = args.SubPath
+		ctx.Actions().StateDelta[state.StateRepoManifest] = string(raw)
+		ctx.Actions().StateDelta[state.StateRepoLocalPath] = localPath
 
 		return FetchRepoTreeResult{
 			FileCount: len(manifest),

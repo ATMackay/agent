@@ -12,7 +12,7 @@ type Kind string
 const (
 	FetchRepoTree Kind = "fetch_repo_tree"
 	ReadFile      Kind = "read_file"
-	SearchRepo    Kind = "search_repo"
+	SearchFiles   Kind = "search_repo"
 	WriteFile     Kind = "write_file"
 )
 
@@ -30,8 +30,8 @@ func GetToolByEnum(kind Kind, deps *Deps) (tool.Tool, error) {
 		return NewFetchRepoTreeTool(cfg.WorkDir)
 	case ReadFile:
 		return NewReadFileTool()
-	case SearchRepo:
-		return NewSearchRepoTool()
+	case SearchFiles:
+		return NewSearchFilesTool()
 	case WriteFile:
 		return NewWriteFileTool()
 	default:

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ATMackay/agent/state"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 )
@@ -42,7 +43,7 @@ func newReadFileTool() func(tool.Context, ReadFileArgs) (ReadFileResult, error) 
 	return func(ctx tool.Context, args ReadFileArgs) (ReadFileResult, error) {
 		slog.Info("tool call", "function", "read_repo_file", "args", toJSONString(args))
 
-		v, err := ctx.State().Get(StateRepoLocalPath)
+		v, err := ctx.State().Get(state.StateRepoLocalPath)
 		if err != nil {
 			return ReadFileResult{}, fmt.Errorf("read repo local path from state: %w", err)
 		}
@@ -58,7 +59,7 @@ func newReadFileTool() func(tool.Context, ReadFileArgs) (ReadFileResult, error) 
 		}
 
 		loaded := map[string]LoadedFileMeta{}
-		existing, err := ctx.State().Get(StateLoadedFiles)
+		existing, err := ctx.State().Get(state.StateLoadedFiles)
 		if err == nil && existing != nil {
 			if s, ok := existing.(string); ok && s != "" {
 				_ = json.Unmarshal([]byte(s), &loaded)
@@ -74,7 +75,7 @@ func newReadFileTool() func(tool.Context, ReadFileArgs) (ReadFileResult, error) 
 		}
 
 		raw, _ := json.Marshal(loaded)
-		ctx.Actions().StateDelta[StateLoadedFiles] = string(raw)
+		ctx.Actions().StateDelta[state.StateLoadedFiles] = string(raw)
 
 		return result, nil
 	}

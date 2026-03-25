@@ -6,15 +6,13 @@ import (
 	"os"
 
 	"github.com/ATMackay/agent/agents/documentor"
-	"github.com/ATMackay/agent/model"
-	"github.com/ATMackay/agent/state"
 	"github.com/ATMackay/agent/workflow"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"google.golang.org/adk/session"
 )
 
-func NewDocumentorCmd() *cobra.Command {
+func NewAnalyzerCmd() *cobra.Command {
 	var repoURL string
 	var ref string
 	var pathPrefix string
@@ -24,8 +22,8 @@ func NewDocumentorCmd() *cobra.Command {
 	var apiKey string
 
 	cmd := &cobra.Command{
-		Use:   "documentor",
-		Short: "Run the code documentation agent",
+		Use:   "analyzer",
+		Short: "Run the code analyzer agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Prefer explicit flag, then env vars via Viper.
 			apiKey = viper.GetString("api-key")
@@ -39,7 +37,7 @@ func NewDocumentorCmd() *cobra.Command {
 				return fmt.Errorf("--output is required")
 			}
 
-			workDir, err := os.MkdirTemp("", "agent-documentor-*")
+			workDir, err := os.MkdirTemp("", "agent-analyzer-*")
 			if err != nil {
 				return fmt.Errorf("create work dir: %w", err)
 			}
@@ -48,11 +46,6 @@ func NewDocumentorCmd() *cobra.Command {
 					slog.Error("error removing body", "err", err)
 				}
 			}()
-
-			cfg := &documentor.Config{WorkDir: workDir}
-			if err := cfg.Validate(); err != nil {
-				return fmt.Errorf("invalid config: %w", err)
-			}
 
 			ctx := cmd.Context()
 
@@ -67,42 +60,26 @@ func NewDocumentorCmd() *cobra.Command {
 			)
 
 			// Select model provider. Supported providers: 'claude' or gemini.
-			modelCfg := &model.Config{
-				Provider: model.Provider(modelProvider),
-				Model:    modelName,
-			}
-			mod, err := model.New(ctx, modelCfg.WithAPIKey(apiKey))
-			if err != nil {
-				return fmt.Errorf("create model: %w", err)
-			}
+			// modelCfg := &model.Config{
+			// 	Provider: model.Provider(modelProvider),
+			// 	Model:    modelName,
+			// }
+			// mod, err := model.New(ctx, modelCfg.WithAPIKey(apiKey))
+			// if err != nil {
+			// 	return fmt.Errorf("create model: %w", err)
+			// }
 
-			docAgent, err := documentor.NewDocumentor(ctx, cfg, mod)
-			if err != nil {
-				return fmt.Errorf("create agent: %w", err)
-			}
-
-			slog.Info(
-				"created agent",
-				"agent_name", docAgent.Name(),
-				"agent_description", docAgent.Description(),
-			)
+			// slog.Info(
+			// 	"created agent",
+			// 	"agent_name", ag.Name(),
+			// 	"agent_description", ag.Description(),
+			// )
 
 			initState := map[string]any{
-				state.StateRepoURL:    repoURL,
-				state.StateRepoRef:    ref,
-				state.StateOutputPath: output,
-				state.StateMaxFiles:   maxFiles,
-			}
-			if pathPrefix != "" {
-				initState[state.StateSubPath] = pathPrefix
+				// TODO
 			}
 
-			s, err := workflow.New(
-				ctx,
-				documentor.AgentName,
-				session.InMemoryService(),
-				docAgent,
-				initState)
+			s, err := workflow.New(ctx, "analyzer", session.InMemoryService(), nil /* TODO */, initState)
 			if err != nil {
 				return fmt.Errorf("create runner: %w", err)
 			}
