@@ -51,6 +51,7 @@ type FetchRepoTreeResult struct {
 }
 
 // NewFetchRepoTool returns a fetch_repo_tree function tool.
+// TODO - decouple fetch from manifest derivation.
 func NewFetchRepoTreeTool(workDir string) (tool.Tool, error) {
 	fetchRepoTreeTool, err := functiontool.New(
 		functiontool.Config{

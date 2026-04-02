@@ -12,7 +12,7 @@ import (
 )
 
 type WriteFileArgs struct {
-	Markdown   string `json:"markdown"`
+	Content    string `json:"content"`
 	OutputPath string `json:"output_path,omitempty"`
 }
 
@@ -51,11 +51,11 @@ func newWriteFileTool() func(tool.Context, WriteFileArgs) (WriteFileResult, erro
 			return WriteFileResult{}, fmt.Errorf("output path is required")
 		}
 
-		if err := writeTextFile(out, args.Markdown); err != nil {
+		if err := writeTextFile(out, args.Content); err != nil {
 			return WriteFileResult{}, err
 		}
 
-		ctx.Actions().StateDelta[state.StateDocumentation] = args.Markdown
+		ctx.Actions().StateDelta[state.StateDocumentation] = args.Content
 		return WriteFileResult{Path: out}, nil
 	}
 }

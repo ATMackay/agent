@@ -14,6 +14,12 @@ import (
 	"google.golang.org/adk/tool/functiontool"
 )
 
+const (
+	defaultSnippetLines = 120
+	defaultMaxBytes     = 8_000
+	hardMaxBytes        = 20_000
+)
+
 type ReadFileArgs struct {
 	Path      string `json:"path"`
 	StartLine int    `json:"start_line,omitempty"`
@@ -129,12 +135,6 @@ func ReadFileSnippetFromCachedCheckout(localPath string, args ReadFileArgs) (Rea
 			Content:    "",
 		}, nil
 	}
-
-	const (
-		defaultSnippetLines = 120
-		defaultMaxBytes     = 8_000
-		hardMaxBytes        = 20_000
-	)
 
 	maxBytes := args.MaxBytes
 	if maxBytes <= 0 {

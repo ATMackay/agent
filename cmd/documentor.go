@@ -104,7 +104,7 @@ func NewDocumentorCmd() *cobra.Command {
 				docAgent,
 				initState)
 			if err != nil {
-				return fmt.Errorf("create runner: %w", err)
+				return err
 			}
 
 			userMsg := documentor.UserMessage()
