@@ -1,16 +1,22 @@
 package state
 
-// Session state keys. TODO agent specific, might refactor...
+// Session state keys.
 const (
-	StateRepoURL    = "repo_url"
-	StateRepoRef    = "repo_ref"
-	StateSubPath    = "sub_path"
+	// Shared state keys.
 	StateOutputPath = "output_path"
-	StateMaxFiles   = "max_files"
+
+	// Documentor agent state keys.
+	StateRepoURL   = "repo_url"
+	StateRepoRef   = "repo_ref"
+	StateSubPath   = "sub_path"
+	StateMaxFiles  = "max_files"
 
 	StateRepoManifest  = "temp_repo_manifest"
 	StateRepoLocalPath = "temp_repo_local_path"
 	StateLoadedFiles   = "temp_loaded_files"
 
 	StateDocumentation = "documentation_markdown"
+
+	// Analyzer agent state keys.
+	StateWorkDir = "work_dir"
 )

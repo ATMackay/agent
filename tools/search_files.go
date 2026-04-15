@@ -72,14 +72,17 @@ func newSearchFilesTool() func(tool.Context, SearchFilesArgs) (SearchFilesResult
 			args.ContextLines = 3
 		}
 
-		v, err := ctx.State().Get(state.StateRepoLocalPath)
-		if err != nil {
-			return SearchFilesResult{}, fmt.Errorf("read repo local path from state: %w", err)
+		// Accept either a cached repo checkout (documentor) or a local work dir (analyzer).
+		localPath := getWorkDir(ctx)
+		if localPath == "" {
+			v, err := ctx.State().Get(state.StateRepoLocalPath)
+			if err != nil {
+				return SearchFilesResult{}, fmt.Errorf("no work_dir or repo cache in state; set work_dir or call fetch_repo_tree first")
+			}
+			localPath, _ = v.(string)
 		}
-
-		localPath, ok := v.(string)
-		if !ok || localPath == "" {
-			return SearchFilesResult{}, fmt.Errorf("repository cache not initialized; call fetch_repo_tree first")
+		if localPath == "" {
+			return SearchFilesResult{}, fmt.Errorf("no work_dir or repo cache in state; set work_dir or call fetch_repo_tree first")
 		}
 
 		searchRoot := localPath
@@ -90,7 +93,7 @@ func newSearchFilesTool() func(tool.Context, SearchFilesArgs) (SearchFilesResult
 		var matches []SearchMatch
 		truncated := false
 
-		err = filepath.Walk(searchRoot, func(path string, info os.FileInfo, err error) error {
+		err := filepath.Walk(searchRoot, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}

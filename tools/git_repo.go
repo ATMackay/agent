@@ -24,7 +24,6 @@ import (
 )
 
 const (
-	maxReadBytes     = 128 * 1024
 	maxManifestBytes = 512 * 1024
 	httpTimeout      = 90 * time.Second
 )

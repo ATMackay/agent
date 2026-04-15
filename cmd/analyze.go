@@ -5,7 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ATMackay/agent/agents/documentor"
+	"github.com/ATMackay/agent/agents/analyzer"
+	"github.com/ATMackay/agent/model"
+	"github.com/ATMackay/agent/state"
 	"github.com/ATMackay/agent/workflow"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -13,110 +15,106 @@ import (
 )
 
 func NewAnalyzerCmd() *cobra.Command {
-	var repoURL string
-	var ref string
-	var pathPrefix string
+	var workDir string
+	var task string
 	var output string
-	var maxFiles int
 	var modelName, modelProvider string
-	var apiKey string
 
 	cmd := &cobra.Command{
 		Use:   "analyzer",
-		Short: "Run the code analyzer agent",
+		Short: "Run the general-purpose analyzer agent",
+		Long: `Run the analyzer agent to perform filesystem and command-line tasks.
+The agent can read, write, and edit local files, execute shell commands,
+and analyze documents (including PDFs, text, source code, and more).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Prefer explicit flag, then env vars via Viper.
-			apiKey = viper.GetString("api-key")
+			apiKey := viper.GetString("api-key")
 			if apiKey == "" {
 				return fmt.Errorf("google gemini or claude api key is required; set --api-key or export API_KEY")
 			}
-			if repoURL == "" {
-				return fmt.Errorf("--repo is required")
-			}
-			if output == "" {
-				return fmt.Errorf("--output is required")
+			if task == "" {
+				return fmt.Errorf("--task is required")
 			}
 
-			workDir, err := os.MkdirTemp("", "agent-analyzer-*")
-			if err != nil {
-				return fmt.Errorf("create work dir: %w", err)
-			}
-			defer func() {
-				if err := os.RemoveAll(workDir); err != nil {
-					slog.Error("error removing body", "err", err)
+			// Default work directory to the current directory.
+			if workDir == "" {
+				var err error
+				workDir, err = os.Getwd()
+				if err != nil {
+					return fmt.Errorf("get working directory: %w", err)
 				}
-			}()
+			}
 
 			ctx := cmd.Context()
 
 			slog.Info(
 				"creating agent",
-				"agent_name", documentor.AgentName,
-				"dir", workDir,
+				"agent_name", analyzer.AgentName,
+				"work_dir", workDir,
 				"model", modelName,
 				"provider", modelProvider,
 				"output", output,
-				"repoURL", repoURL,
 			)
 
-			// Select model provider. Supported providers: 'claude' or gemini.
-			// modelCfg := &model.Config{
-			// 	Provider: model.Provider(modelProvider),
-			// 	Model:    modelName,
-			// }
-			// mod, err := model.New(ctx, modelCfg.WithAPIKey(apiKey))
-			// if err != nil {
-			// 	return fmt.Errorf("create model: %w", err)
-			// }
+			modelCfg := &model.Config{
+				Provider: model.Provider(modelProvider),
+				Model:    modelName,
+			}
+			mod, err := model.New(ctx, modelCfg.WithAPIKey(apiKey))
+			if err != nil {
+				return fmt.Errorf("create model: %w", err)
+			}
 
-			// slog.Info(
-			// 	"created agent",
-			// 	"agent_name", ag.Name(),
-			// 	"agent_description", ag.Description(),
-			// )
+			cfg := &analyzer.Config{WorkDir: workDir}
+			ag, err := analyzer.NewAnalyzer(ctx, cfg, mod)
+			if err != nil {
+				return fmt.Errorf("create agent: %w", err)
+			}
+
+			slog.Info(
+				"created agent",
+				"agent_name", ag.Name(),
+				"agent_description", ag.Description(),
+			)
 
 			initState := map[string]any{
-				// TODO
+				state.StateWorkDir:    workDir,
+				state.StateOutputPath: output,
 			}
 
-			s, err := workflow.New(ctx, "analyzer", session.InMemoryService(), nil /* TODO */, initState)
+			s, err := workflow.New(
+				ctx,
+				analyzer.AgentName,
+				session.InMemoryService(),
+				ag,
+				initState,
+			)
 			if err != nil {
-				return fmt.Errorf("create runner: %w", err)
+				return fmt.Errorf("create workflow: %w", err)
 			}
 
-			userMsg := documentor.UserMessage()
+			userMsg := analyzer.UserMessage(task)
 
 			if err := s.Start(ctx, userCLI, userMsg); err != nil {
 				return err
 			}
 
-			if _, err := os.Stat(output); err != nil {
-				return fmt.Errorf("agent finished but output file was not created: %w", err)
-			}
-
-			slog.Info("Documentation written to", "output_file", output)
+			slog.Info("Analyzer complete", "output_file", output)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&repoURL, "repo", "", "GitHub repository URL")
-	cmd.Flags().StringVar(&ref, "ref", "", "Optional branch, tag, or commit")
-	cmd.Flags().StringVar(&pathPrefix, "path", "", "Optional subdirectory to document")
-	cmd.Flags().StringVar(&output, "output", "doc.agentcli.md", "Output file path for the generated markdown")
-	cmd.Flags().IntVar(&maxFiles, "max-files", 50, "Maximum number of files to read")
+	cmd.Flags().StringVar(&workDir, "work-dir", "", "Working directory for file operations (defaults to current directory)")
+	cmd.Flags().StringVar(&task, "task", "", "Task description for the analyzer agent (required)")
+	cmd.Flags().StringVar(&output, "output", "analysis.md", "Output file path for the agent's written result")
 	cmd.Flags().StringVar(&modelName, "model", "claude-opus-4-1-20250805", "Language model to use")
-	cmd.Flags().StringVar(&modelProvider, "provider", "claude", "LLM provider to use (claude or gemini)")
+	cmd.Flags().StringVar(&modelProvider, "provider", "claude", "LLM provider (claude or gemini)")
 
-	// Bind flags to environment variables
-	must(viper.BindPFlag("repo", cmd.Flags().Lookup("repo")))
-	must(viper.BindPFlag("ref", cmd.Flags().Lookup("ref")))
-	must(viper.BindPFlag("path", cmd.Flags().Lookup("path")))
+	must(viper.BindPFlag("work-dir", cmd.Flags().Lookup("work-dir")))
+	must(viper.BindPFlag("task", cmd.Flags().Lookup("task")))
 	must(viper.BindPFlag("output", cmd.Flags().Lookup("output")))
-	must(viper.BindPFlag("max-files", cmd.Flags().Lookup("max-files")))
 	must(viper.BindPFlag("model", cmd.Flags().Lookup("model")))
 	must(viper.BindPFlag("provider", cmd.Flags().Lookup("provider")))
 
-	// API_KEY is preferred, GOOGLE_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY are accepted as fallback.
 	must(viper.BindEnv("api-key", "API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "CLAUDE_API_KEY"))
 
 	return cmd
