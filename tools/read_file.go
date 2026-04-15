@@ -9,8 +9,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ATMackay/agent/state"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
+)
+
+const (
+	defaultSnippetLines = 120
+	defaultMaxBytes     = 8_000
+	hardMaxBytes        = 20_000
 )
 
 type ReadFileArgs struct {
@@ -42,7 +49,7 @@ func newReadFileTool() func(tool.Context, ReadFileArgs) (ReadFileResult, error) 
 	return func(ctx tool.Context, args ReadFileArgs) (ReadFileResult, error) {
 		slog.Info("tool call", "function", "read_repo_file", "args", toJSONString(args))
 
-		v, err := ctx.State().Get(StateRepoLocalPath)
+		v, err := ctx.State().Get(state.StateRepoLocalPath)
 		if err != nil {
 			return ReadFileResult{}, fmt.Errorf("read repo local path from state: %w", err)
 		}
@@ -58,7 +65,7 @@ func newReadFileTool() func(tool.Context, ReadFileArgs) (ReadFileResult, error) 
 		}
 
 		loaded := map[string]LoadedFileMeta{}
-		existing, err := ctx.State().Get(StateLoadedFiles)
+		existing, err := ctx.State().Get(state.StateLoadedFiles)
 		if err == nil && existing != nil {
 			if s, ok := existing.(string); ok && s != "" {
 				_ = json.Unmarshal([]byte(s), &loaded)
@@ -74,12 +81,14 @@ func newReadFileTool() func(tool.Context, ReadFileArgs) (ReadFileResult, error) 
 		}
 
 		raw, _ := json.Marshal(loaded)
-		ctx.Actions().StateDelta[StateLoadedFiles] = string(raw)
+		ctx.Actions().StateDelta[state.StateLoadedFiles] = string(raw)
 
 		return result, nil
 	}
 }
 
+// ReadFileSnippetFromCachedCheckout reads a file from a cached repository checkout.
+// It validates that the path does not escape the repository root before reading.
 func ReadFileSnippetFromCachedCheckout(localPath string, args ReadFileArgs) (ReadFileResult, error) {
 	if strings.TrimSpace(args.Path) == "" {
 		return ReadFileResult{}, fmt.Errorf("path is required")
@@ -112,28 +121,25 @@ func ReadFileSnippetFromCachedCheckout(localPath string, args ReadFileArgs) (Rea
 		return ReadFileResult{}, fmt.Errorf("path %q is a directory, not a file", args.Path)
 	}
 
+	return readFileSnippet(absFile, args.Path, args)
+}
+
+// readFileSnippet reads a snippet of a file at an already-resolved absolute path.
+// displayPath is used in error messages and the returned result.
+func readFileSnippet(absFile, displayPath string, args ReadFileArgs) (ReadFileResult, error) {
 	lines, err := readFileLines(absFile)
 	if err != nil {
-		return ReadFileResult{}, fmt.Errorf("read file %s: %w", args.Path, err)
+		return ReadFileResult{}, fmt.Errorf("read file %s: %w", displayPath, err)
 	}
 
 	totalLines := len(lines)
 	if totalLines == 0 {
 		return ReadFileResult{
-			Path:       args.Path,
-			StartLine:  0,
-			EndLine:    0,
+			Path:       displayPath,
 			TotalLines: 0,
-			Truncated:  false,
 			Content:    "",
 		}, nil
 	}
-
-	const (
-		defaultSnippetLines = 120
-		defaultMaxBytes     = 8_000
-		hardMaxBytes        = 20_000
-	)
 
 	maxBytes := args.MaxBytes
 	if maxBytes <= 0 {
@@ -179,7 +185,7 @@ func ReadFileSnippetFromCachedCheckout(localPath string, args ReadFileArgs) (Rea
 	content, actualEndLine, truncated := joinLinesWithinByteLimit(selected, startLine, maxBytes)
 
 	return ReadFileResult{
-		Path:       args.Path,
+		Path:       displayPath,
 		StartLine:  startLine,
 		EndLine:    actualEndLine,
 		TotalLines: totalLines,

@@ -3,11 +3,14 @@ package documentor
 import (
 	"context"
 
+	"github.com/ATMackay/agent/state"
 	"github.com/ATMackay/agent/tools"
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model"
 )
+
+const AgentName = "documentor"
 
 type Documentor struct {
 	agent.Agent
@@ -22,7 +25,7 @@ func NewDocumentor(ctx context.Context, cfg *Config, model model.LLM) (*Document
 	functionTools, err := tools.GetTools([]tools.Kind{
 		tools.FetchRepoTree, // Fetch repository tree to understand the structure of the codebase.
 		tools.ReadFile,      // Read specific files to understand code details and extract relevant information for documentation.
-		tools.SearchRepo,    // Search the repository to find relevant code snippets or information.
+		tools.SearchFiles,   // Search the repository to find relevant code snippets or information.
 		tools.WriteFile,     // Write documentation or other output files.
 	}, &deps)
 	if err != nil {
@@ -31,12 +34,12 @@ func NewDocumentor(ctx context.Context, cfg *Config, model model.LLM) (*Document
 
 	// Instantiate Documentor LLM agent
 	da, err := llmagent.New(llmagent.Config{
-		Name:        "documentor",
+		Name:        AgentName,
 		Model:       model,
 		Description: "Retrieves code from a GitHub repository and writes high-quality markdown documentation.",
 		Instruction: buildInstruction(),
 		Tools:       functionTools,
-		OutputKey:   tools.StateDocumentation,
+		OutputKey:   state.StateDocumentation,
 	})
 	if err != nil {
 		return nil, err

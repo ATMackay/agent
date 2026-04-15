@@ -10,15 +10,24 @@ import (
 type Kind string
 
 const (
+	// Documentor tools.
 	FetchRepoTree Kind = "fetch_repo_tree"
 	ReadFile      Kind = "read_file"
-	SearchRepo    Kind = "search_repo"
+	SearchFiles   Kind = "search_repo"
 	WriteFile     Kind = "write_file"
+
+	// Analyzer tools.
+	ListDir       Kind = "list_dir"
+	ReadLocalFile Kind = "read_local_file"
+	EditFile      Kind = "edit_file"
+	ExecCommand   Kind = "exec_command"
 )
 
-// GetToolByEnum
+// GetToolByEnum returns the tool.Tool for the given Kind, initialised with any
+// required dependency configuration from deps.
 func GetToolByEnum(kind Kind, deps *Deps) (tool.Tool, error) {
 	switch kind {
+	// Documentor tools
 	case FetchRepoTree:
 		cfg, err := getConfig[FetchRepoTreeConfig](kind, deps)
 		if err != nil {
@@ -30,10 +39,21 @@ func GetToolByEnum(kind Kind, deps *Deps) (tool.Tool, error) {
 		return NewFetchRepoTreeTool(cfg.WorkDir)
 	case ReadFile:
 		return NewReadFileTool()
-	case SearchRepo:
-		return NewSearchRepoTool()
+	case SearchFiles:
+		return NewSearchFilesTool()
 	case WriteFile:
 		return NewWriteFileTool()
+
+	// Analyzer tools
+	case ListDir:
+		return NewListDirTool()
+	case ReadLocalFile:
+		return NewReadLocalFileTool()
+	case EditFile:
+		return NewEditFileTool()
+	case ExecCommand:
+		return NewExecCommandTool()
+
 	default:
 		return nil, fmt.Errorf("invalid tool kind: %q", kind)
 	}

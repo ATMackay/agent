@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ATMackay/agent/state"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 )
 
-type SearchRepoArgs struct {
+type SearchFilesArgs struct {
 	Query        string `json:"query"`
 	PathPrefix   string `json:"path_prefix,omitempty"`
 	MaxResults   int    `json:"max_results,omitempty"`
@@ -27,34 +28,34 @@ type SearchMatch struct {
 	Snippet   string `json:"snippet"`
 }
 
-type SearchRepoResult struct {
+type SearchFilesResult struct {
 	Query      string        `json:"query"`
 	MatchCount int           `json:"match_count"`
 	Truncated  bool          `json:"truncated"`
 	Matches    []SearchMatch `json:"matches"`
 }
 
-// NewSearchRepoTool returns a repo search tool
-func NewSearchRepoTool() (tool.Tool, error) {
-	searchRepoTool, err := functiontool.New(
+// NewSearchFilesTool returns a repo search tool
+func NewSearchFilesTool() (tool.Tool, error) {
+	SearchFilesTool, err := functiontool.New(
 		functiontool.Config{
-			Name:        "search_repo",
-			Description: "Search the cached repository for text matches and return matching file paths, line numbers, and short snippets. Use this before reading files to locate relevant symbols, functions, types, config keys, or strings.",
+			Name:        "search_files",
+			Description: "Search the cached files for text matches and return matching file paths, line numbers, and short snippets. Use this before reading files to locate relevant symbols, functions, types, config keys, or strings.",
 		},
-		newSearchRepoTool(),
+		newSearchFilesTool(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create search_repo tool: %w", err)
+		return nil, fmt.Errorf("create search_files tool: %w", err)
 	}
-	return searchRepoTool, nil
+	return SearchFilesTool, nil
 }
 
-func newSearchRepoTool() func(tool.Context, SearchRepoArgs) (SearchRepoResult, error) {
-	return func(ctx tool.Context, args SearchRepoArgs) (SearchRepoResult, error) {
-		slog.Info("tool call", "function", "search_repo", "args", toJSONString(args))
+func newSearchFilesTool() func(tool.Context, SearchFilesArgs) (SearchFilesResult, error) {
+	return func(ctx tool.Context, args SearchFilesArgs) (SearchFilesResult, error) {
+		slog.Info("tool call", "function", "search_files", "args", toJSONString(args))
 
 		if strings.TrimSpace(args.Query) == "" {
-			return SearchRepoResult{}, fmt.Errorf("query is required")
+			return SearchFilesResult{}, fmt.Errorf("query is required")
 		}
 
 		// Sanitize tool args to prevent context overload
@@ -71,14 +72,17 @@ func newSearchRepoTool() func(tool.Context, SearchRepoArgs) (SearchRepoResult, e
 			args.ContextLines = 3
 		}
 
-		v, err := ctx.State().Get(StateRepoLocalPath)
-		if err != nil {
-			return SearchRepoResult{}, fmt.Errorf("read repo local path from state: %w", err)
+		// Accept either a cached repo checkout (documentor) or a local work dir (analyzer).
+		localPath := getWorkDir(ctx)
+		if localPath == "" {
+			v, err := ctx.State().Get(state.StateRepoLocalPath)
+			if err != nil {
+				return SearchFilesResult{}, fmt.Errorf("no work_dir or repo cache in state; set work_dir or call fetch_repo_tree first")
+			}
+			localPath, _ = v.(string)
 		}
-
-		localPath, ok := v.(string)
-		if !ok || localPath == "" {
-			return SearchRepoResult{}, fmt.Errorf("repository cache not initialized; call fetch_repo_tree first")
+		if localPath == "" {
+			return SearchFilesResult{}, fmt.Errorf("no work_dir or repo cache in state; set work_dir or call fetch_repo_tree first")
 		}
 
 		searchRoot := localPath
@@ -89,7 +93,7 @@ func newSearchRepoTool() func(tool.Context, SearchRepoArgs) (SearchRepoResult, e
 		var matches []SearchMatch
 		truncated := false
 
-		err = filepath.Walk(searchRoot, func(path string, info os.FileInfo, err error) error {
+		err := filepath.Walk(searchRoot, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}
@@ -125,10 +129,10 @@ func newSearchRepoTool() func(tool.Context, SearchRepoArgs) (SearchRepoResult, e
 
 		// swallow the sentinel-ish stop condition
 		if err != nil && !strings.Contains(err.Error(), "search result limit reached") {
-			return SearchRepoResult{}, err
+			return SearchFilesResult{}, err
 		}
 
-		return SearchRepoResult{
+		return SearchFilesResult{
 			Query:      args.Query,
 			MatchCount: len(matches),
 			Truncated:  truncated,

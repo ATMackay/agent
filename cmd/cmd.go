@@ -11,9 +11,21 @@ const EnvPrefix = "AGENT"
 
 func NewAgentCLICmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "agent [subcommand]",
-		Short: fmt.Sprintf("agent command line interface.\n\nVERSION:\n  semver: %s\n  commit: %s\n  compilation date: %s",
-			constants.Version, constants.GitCommit, constants.BuildDate),
+		Use:   "agent [subcommand]",
+		Short: "CLI for running AI agents and workflows",
+		Long: fmt.Sprintf(`Agent CLI
+
+Run and manage AI agents such as code documentors, reviewers, and other workflows.
+
+Version:
+  semver: %s
+  commit: %s
+  build:  %s
+`,
+			constants.Version,
+			constants.GitCommit,
+			constants.BuildDate,
+		),
 		RunE: runHelp,
 	}
 

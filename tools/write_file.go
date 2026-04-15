@@ -6,12 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ATMackay/agent/state"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 )
 
 type WriteFileArgs struct {
-	Markdown   string `json:"markdown"`
+	Content    string `json:"content"`
 	OutputPath string `json:"output_path,omitempty"`
 }
 
@@ -39,7 +40,7 @@ func newWriteFileTool() func(tool.Context, WriteFileArgs) (WriteFileResult, erro
 		slog.Info("tool call", "function", string(WriteFile), "content_length", len(toJSONString(args)))
 		out := args.OutputPath
 		if out == "" {
-			v, err := ctx.State().Get(StateOutputPath)
+			v, err := ctx.State().Get(state.StateOutputPath)
 			if err == nil {
 				if s, ok := v.(string); ok {
 					out = s
@@ -50,11 +51,11 @@ func newWriteFileTool() func(tool.Context, WriteFileArgs) (WriteFileResult, erro
 			return WriteFileResult{}, fmt.Errorf("output path is required")
 		}
 
-		if err := writeTextFile(out, args.Markdown); err != nil {
+		if err := writeTextFile(out, args.Content); err != nil {
 			return WriteFileResult{}, err
 		}
 
-		ctx.Actions().StateDelta[StateDocumentation] = args.Markdown
+		ctx.Actions().StateDelta[state.StateDocumentation] = args.Content
 		return WriteFileResult{Path: out}, nil
 	}
 }
